@@ -25,7 +25,7 @@ object FST{
 
 object VCS{
 
-  val version = 2016 // testing with the
+  val version = 2016
 
   val flags = if(version == 2018) VCSFlags(
     compileFlags = List("-kdb"),
@@ -56,7 +56,7 @@ object SIMCFG{
           case (false,false) => VCS.simCfg
         }
       }
-      case None => VCS.simCfg
+      case None => CI.simCfg
     }
   }
 }

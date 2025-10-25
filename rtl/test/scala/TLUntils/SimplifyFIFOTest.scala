@@ -7,8 +7,9 @@ import scala.collection.mutable
 import TLSim._
 
 class SimplifyFIFOTest extends AnyFunSuite {
+
   test(" simplify FIFO random test") {
-    SIMCFG().compile {
+    SIMCFG(gtkFirst = true).compile {
       val dut = new SimplifyFIFO(Bits(10 bits),32)
       dut.empty.simPublic()
       dut
