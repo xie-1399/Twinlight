@@ -1,4 +1,4 @@
-package TLUntils
+package TLUtils
 
 /*
  ** follow the Apache-2.0 License.(c), All rights reserved **
@@ -7,7 +7,7 @@ package TLUntils
 
 import spinal.core._
 import spinal.lib._
-import TLUntils.TLPlugin.TLModule
+import TLUtils.TLPlugin.TLModule
 
 class SimplifyFIFO[T <: Data](gen: HardType[T], val entries: Int) extends TLModule {
 

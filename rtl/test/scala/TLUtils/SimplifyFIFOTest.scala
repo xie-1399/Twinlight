@@ -1,10 +1,13 @@
-package TLUntils
+package TLUtils
 
 import org.scalatest.funsuite.AnyFunSuite
 import spinal.core._
 import spinal.core.sim._
+
 import scala.collection.mutable
 import TLSim._
+
+import scala.language.postfixOps
 
 class SimplifyFIFOTest extends AnyFunSuite {
 

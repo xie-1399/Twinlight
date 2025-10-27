@@ -3,6 +3,8 @@ package TLFpu
 import spinal.core._
 import spinal.lib._
 
+import scala.language.postfixOps
+
 /**
  *  follow the Apache-2.0 License.(c), All rights reserved *
  * Floating point value
@@ -133,7 +135,7 @@ object Floating {
   def fromUInt(x: UInt, expWidth: Int, manWidth: Int): Floating = {
     val fp = new Floating(expWidth, manWidth)
     fp.sign := x(expWidth + manWidth)
-    fp.exponent := x(expWidth + manWidth - 1 downto manWidth)
+    fp.exponent := x(expWidth + manWidth - 1 downto manWidth).asBits
     fp.mantissa := x(manWidth - 1 downto 0).asBits
     fp
   }
