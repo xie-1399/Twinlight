@@ -1,7 +1,6 @@
-package TLUtils
+package Twinlight.TLUtils
 
 import spinal.core._
-import spinal.lib._
 import spinal.lib.experimental.math.Floating16
 
 object TLPlugin{
@@ -9,8 +8,6 @@ object TLPlugin{
 
   class TLModule() extends Component {
     noIoPrefix()
-
-    Floating16
   }
 
 

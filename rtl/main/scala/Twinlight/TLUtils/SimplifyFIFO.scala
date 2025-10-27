@@ -1,13 +1,13 @@
-package TLUtils
+package Twinlight.TLUtils
 
 /*
  ** follow the Apache-2.0 License.(c), All rights reserved **
  * this file will make a more friendly use fifo and the fifo control is more simple to use *
 */
 
+import Twinlight.TLUtils.TLPlugin.TLModule
 import spinal.core._
 import spinal.lib._
-import TLUtils.TLPlugin.TLModule
 
 class SimplifyFIFO[T <: Data](gen: HardType[T], val entries: Int) extends TLModule {
 
