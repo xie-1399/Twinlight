@@ -12,7 +12,7 @@ import scala.language.postfixOps
 class SimplifyFIFOTest extends AnyFunSuite {
 
   test(" simplify FIFO random test") {
-    SIMCFG(gtkFirst = true).compile {
+    SIMCFG().compile {
       val dut = new SimplifyFIFO(Bits(10 bits),32)
       dut.empty.simPublic()
       dut

@@ -25,7 +25,7 @@ object FST{
 
 object VCS{
 
-  val version = 2016
+  val version = 2018
 
   val flags = if(version == 2018) VCSFlags(
     compileFlags = List("-kdb"),
