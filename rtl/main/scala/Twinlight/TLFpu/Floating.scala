@@ -119,6 +119,13 @@ case class Floating(exponentSize: Int,
    * @return Absolute value of this float
    */
   def abs: Floating = FloatingAbs(this)
+
+  def asUInt : UInt = {
+    val size = this.mantissaSize + this.exponentSize + 1
+    val u = UInt(size bits)
+    u := ((this.sign.asBits << (size -1) ).resize(size bits) | (this.exponent << this.mantissaSize).resize(size bits) | this.mantissa.resize(size bits)).asUInt
+    u
+  }
 }
 
 
@@ -152,6 +159,7 @@ object Floating {
 
 class RawFloat(exponentSize: Int,
                mantissaSize: Int) extends Bundle {
+  // here, the mantissa field CONTAINS the implicit first bit
   val sign = Bool()
   val exponent = Bits(exponentSize bits)
   val mantissa = Bits(mantissaSize bits)
@@ -160,7 +168,7 @@ class RawFloat(exponentSize: Int,
 /* let the floating to the RawFloat*/
 object RawFloat {
   def fromFP(fp: Floating, expNotZero: Option[Bool] = None): RawFloat = {
-    val inner = new RawFloat(fp.exponentSize, fp.mantissaSize)
+    val inner = new RawFloat(fp.exponentSize, fp.mantissaSize + 1)
     val nz = if (expNotZero.isDefined) expNotZero.get else fp.exponent.orR
     inner.sign := fp.sign
     inner.exponent := Mux(nz, fp.exponent, B(1, fp.exponentSize bits))
