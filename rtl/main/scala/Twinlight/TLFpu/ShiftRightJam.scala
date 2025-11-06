@@ -20,7 +20,7 @@ class ShiftRightJam(len: Int, expWidth: Int) extends TLModule {
   val stickyMask = ((U(1) << shamt) - 1).resize(len bits).asBits | B(exceed) #* len
 
   io.o := Mux(exceed, B(0, len bits), (io.i >> shamt).resize(len bits))
-  io.stiky := (io.i.asBits & stickyMask).asBools.reduceBalancedTree({ case (x, y) => x | y })
+  io.stiky := (io.i.asBits & stickyMask).orR
 }
 
 object ShiftRightJam {
