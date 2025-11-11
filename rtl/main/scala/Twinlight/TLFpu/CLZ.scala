@@ -15,7 +15,7 @@ class CLZ(len: Int) extends TLModule{
     val clz_out = out port UInt(outWidth bits)
   }
 
-  io.clz_out := io.clz_in.asBits.reversed.asBools.sFindFirst({i => i===True})
+  io.clz_out := io.clz_in.asBits.reversed.asBools.sFindFirst({i => i===True})._2
 }
 
 object CLZ {
