@@ -38,7 +38,7 @@ class ShiftRightJamTest extends AnyFunSuite {
               dut.io.shamt #= gen.nextInt(ub - lb) + lb
               dut.clockDomain.waitSampling()
               val o = dut.io.o.toInt
-              val s = dut.io.stiky.toBoolean
+              val s = dut.io.sticky.toBoolean
 
               val std_o = if (dut.io.shamt.toInt >= 32) 0 else dut.io.i.toInt >>> dut.io.shamt.toInt
               val std_sticky = Array.tabulate(32)({ i =>

@@ -12,7 +12,7 @@ class ShiftRightJam(len: Int, expWidth: Int) extends TLModule {
     val i = in port Bits(len bits)
     val shamt = in port UInt(expWidth bits)
     val o = out port Bits(len bits)
-    val stiky = out port Bool()
+    val sticky = out port Bool()
   }
 
   val exceed = io.shamt > len
@@ -20,7 +20,7 @@ class ShiftRightJam(len: Int, expWidth: Int) extends TLModule {
   val stickyMask = ((U(1) << shamt) - 1).resize(len bits).asBits | B(exceed) #* len
 
   io.o := Mux(exceed, B(0, len bits), (io.i >> shamt).resize(len bits))
-  io.stiky := (io.i.asBits & stickyMask).orR
+  io.sticky := (io.i.asBits & stickyMask).orR
 }
 
 object ShiftRightJam {
@@ -28,6 +28,6 @@ object ShiftRightJam {
     val shifter = new ShiftRightJam(i.getWidth, shamt.getWidth)
     shifter.io.i := i
     shifter.io.shamt := shamt
-    (shifter.io.o, shifter.io.stiky)
+    (shifter.io.o, shifter.io.sticky)
   }
 }
