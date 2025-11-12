@@ -13,18 +13,17 @@ class LZA(len: Int) extends TLModule {
     val f = out port UInt(len bits)
   }
 
-  val p = Vec.fill(len)(Bool())
-  val k = Vec.fill(len)(Bool())
+  val p = (io.a ^ io.b).asBools
+  val g = (io.a & io.b).asBools
+  val k = (~io.a & ~io.b).asBools // also annihilate
 
   io.f := Vec.tabulate(len)({ i =>
-    p(i) := io.a(i) ^ io.b(i)
-    k(i) := (!io.a(i)) & (!io.b(i))
     if (i == 0){
       False
     }else{
-      p(i) ^ (!k(i-1))
+      p(i) ^ !k(i-1) //TODO Why are the generation signals missing? however it works. I shall figure it out later.
     }
-  }).asBits.reversed.asUInt
+  }).asBits.asUInt
 }
 
 object LZA {
