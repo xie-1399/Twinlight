@@ -9,6 +9,16 @@ import scala.util.Random
 
 class CLZTest extends AnyFunSuite {
 
+  def clz_std(a: Array[Boolean]): Int = {
+    var std_o = -1
+    for (i <- a.indices) {
+      if (a.reverse(i) && std_o == -1) {
+        std_o = i
+      }
+    }
+    std_o
+  }
+
   test(" CLZ random test") {
     SIMCFG(gtkFirst = true).compile {
       val dut = new CLZ(28)
@@ -25,12 +35,7 @@ class CLZTest extends AnyFunSuite {
               dut.io.clz_in #= gen.nextInt(0x7fffffff >> (i % 28 + 3))
               dut.clockDomain.waitSampling()
               val o = dut.io.clz_out.toInt
-              var std_o = -1;
-              for (i <- dut.io.clz_in.toBooleans.indices) {
-                if (dut.io.clz_in.toBooleans.reverse(i) && std_o == -1) {
-                  std_o = i
-                }
-              }
+              var std_o = clz_std(dut.io.clz_in.toBooleans);
               if (!dut.io.clz_in.toBooleans.contains(true)) true else std_o == o
             }).map { i => if (i) 0 else 1 }.sum
 
