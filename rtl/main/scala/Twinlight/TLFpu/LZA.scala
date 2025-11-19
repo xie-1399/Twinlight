@@ -7,6 +7,7 @@ import spinal.lib._
 import scala.language.postfixOps
 
 class LZA(len: Int) extends TLModule {
+  // One must ensure that the MSB of both io.a and io.b is zero.
   val io = new Bundle {
     val a = in port UInt(len bits)
     val b = in port UInt(len bits)
@@ -14,21 +15,21 @@ class LZA(len: Int) extends TLModule {
   }
 
   val p = (io.a ^ io.b).asBools
-  val g = (io.a & io.b).asBools
   val k = (~io.a & ~io.b).asBools // also annihilate
 
   io.f := Vec.tabulate(len)({ i =>
-    if (i == 0){
+    if (i == 0) {
       False
-    }else{
-      p(i) ^ !k(i-1) //TODO Why are the generation signals missing? however it works. I shall figure it out later.
+    } else {
+      p(i) ^ !k(i - 1) //TODO Why are the generation signals missing? however it works. I shall figure it out later.
     }
   }).asBits.asUInt
 }
 
 object LZA {
-  def apply(len: Int, a: UInt, b: UInt) : UInt = {
-    val lza = new LZA(len)
+  def apply(a: UInt, b: UInt): UInt = {
+    assert(a.getWidth == b.getWidth, "The widths of LZA inputs are not equal to each other.")
+    val lza = new LZA(a.getWidth)
     lza.io.a := a
     lza.io.b := b
     lza.io.f

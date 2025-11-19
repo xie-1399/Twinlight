@@ -20,8 +20,9 @@ class LZATest extends AnyFunSuite {
   }
 
   test(" LZA random test") {
+    val len = 28
     SIMCFG(gtkFirst = true).compile {
-      val dut = new LZA(28)
+      val dut = new LZA(len)
       dut
     }.doSimUntilVoid {
       dut =>
@@ -31,20 +32,22 @@ class LZATest extends AnyFunSuite {
         def monitor() = {
           val testThread = fork {
             val gen = new Random()
-            val err = Array.tabulate(10)({ i =>
-              dut.io.a #= gen.nextInt(0x7fffffff >> (i % 28 + 3))
-              dut.io.b #= gen.nextInt(0x7fffffff >> (i % 28 + 3))
+            val err = Array.tabulate(32767)({ i =>
+              dut.io.a #= gen.nextInt((0x7fffffff >> (i % len + 3)).abs) >> 1
+              dut.io.b #= gen.nextInt((0x7fffffff >> ((i+7) % len + 3)).abs) >> 1
               dut.clockDomain.waitSampling()
-              val o_str = dut.io.f.toInt.toBinaryString.reverse.padTo(28, '0').reverse
+              val o_str = dut.io.f.toInt.toBinaryString.reverse.padTo(len, '0').reverse
 
               val s = dut.io.a.toInt + dut.io.b.toInt
-              val s_str = s.toBinaryString.reverse.padTo(28, '0').reverse
+              val s_str = s.toBinaryString.reverse.padTo(len, '0').reverse
 
-              val std_diff = (clz_std(Array.tabulate(28)({ c =>
+              val res = clz_std(Array.tabulate(len)({ c =>
                 if (s_str.reverse(c) == '0') false else true
-              })) - clz_std(Array.tabulate(28)({ c =>
+              }))
+              val ans = clz_std(Array.tabulate(len)({ c =>
                 if (o_str.reverse(c) == '0') false else true
-              }))).abs
+              }))
+              val std_diff = (res - ans).abs
               std_diff <= 1
             }).map { i => if (i) 0 else 1 }.sum
 
