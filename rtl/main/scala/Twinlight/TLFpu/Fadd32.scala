@@ -14,17 +14,18 @@ class Fadd_spcial_info extends Bundle {
 
 
 class FarPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
+  val manWidthWithHiddenOne = precision + 1
   val io = new Bundle {
-    val a = in port new RawFloat(expWidth, precision)
-    val b = in port new RawFloat(expWidth, precision)
+    val a = in port RawFloat(expWidth, manWidthWithHiddenOne) // to include the hidden one in the mantissa field
+    val b = in port RawFloat(expWidth, manWidthWithHiddenOne)
     val exp_diff = in port UInt(expWidth bits)
     val expSub = in port Bool()
 
-    val a_mantissa = out port UInt(precision bits)
-    val b_mantissa = out port UInt(precision + 4 bits) // manWidth + G, R, S bits + sign bit
+    val a_mantissa = out port UInt(manWidthWithHiddenOne bits)
+    val b_mantissa = out port UInt(manWidthWithHiddenOne + 4 bits) // manWidth + G, R, S bits + sign bit
     val b_sticky = out port Bool()
     val a_exps = out port Vec.fill(3)(UInt(expWidth bits))
-    val result = out port new RawFloat(expWidth, outPC + 3)
+    val result = out port RawFloat(expWidth, outPC + 3)
   }
   val (b_shifted, b_sticky) = ShiftRightJam(io.b.mantissa ## B(0, 2 bits), io.exp_diff)
 
@@ -43,19 +44,20 @@ class FarPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
 }
 
 class NearPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
+  val manWidthWithHiddenOne = precision + 1
   val io = new Bundle {
-    val a = in port new RawFloat(expWidth, precision)
-    val b = in port new RawFloat(expWidth, precision)
+    val a = in port RawFloat(expWidth, manWidthWithHiddenOne) // same reason as the FarPath module
+    val b = in port RawFloat(expWidth, manWidthWithHiddenOne)
     val need_shift_b = in port Bool()
     val rm = in port UInt(3 bits)
 
-    val result = out port new RawFloat(expWidth, outPC + 3)
+    val result = out port RawFloat(expWidth, outPC + 3)
     val sig_is_zero = out port Bool()
     val a_lt_b = out port Bool()
     val lza_error = out port Bool()
     val int_bit = out port Bool()
-    val sig_raw = out port UInt(precision + 1 bits)
-    val lzc = out port UInt(log2Up(precision + 1) bits)
+    val sig_raw = out port UInt(manWidthWithHiddenOne bits)
+    val lzc = out port UInt(log2Up(manWidthWithHiddenOne) bits)
   }
 
   val a_sig = (io.a.mantissa ## B(0, 1 bits)).asUInt
@@ -65,7 +67,7 @@ class NearPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
   val a_minus_b = (U(0, 1 bits) ## a_sig).asUInt + (U(1, 1 bits) ## b_neg).asUInt + U(1, 1 + a_sig.getWidth bits)
   val a_lt_b = a_minus_b.lsb
   val sig_raw = a_minus_b.asBits(outPC downto 0).asUInt
-  val lza_str = LZA(precision + 1, a_sig, b_neg)
+  val lza_str = LZA(a_sig, b_neg).resize(manWidthWithHiddenOne)
   val lza_str_zero = !lza_str.orR
 
   val need_shift_lim = io.a.exponent.asUInt < U(precision + 1, io.a.exponent.getWidth bits)
@@ -103,7 +105,7 @@ class NearPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
 
   val near_path_sign = Mux(a_lt_b, io.b.sign, io.a.sign)
 
-  val result = new RawFloat(expWidth, outPC + 3)
+  val result = RawFloat(expWidth, outPC + 3)
   result.sign := near_path_sign
   result.exponent := io.a.exponent
   result.mantissa := 0
@@ -119,16 +121,17 @@ class NearPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
 
 class FCMA_ADD_s1_to_s2(val expWidth: Int, val precision: Int, val outPc: Int)
   extends Bundle with IMasterSlave {
+  val manWidthWithHiddenOne = precision + 1
   val rm = UInt(3 bits)
-  val far_path_out = new RawFloat(expWidth, outPc + 3)
-  val near_path_out = new RawFloat(expWidth, outPc + 3)
+  val far_path_out = RawFloat(expWidth, outPc + 3)
+  val near_path_out = RawFloat(expWidth, outPc + 3)
   val special_case = Flow(new Fadd_spcial_info)
 
   // far path addtitional
   val small_add = Bool()
   val far_path_mul_of = Bool()
-  val far_sig_a = UInt(precision bits)
-  val far_sig_b = UInt(precision + 4 bits)
+  val far_sig_a = UInt(manWidthWithHiddenOne bits)
+  val far_sig_b = UInt(manWidthWithHiddenOne + 4 bits)
   val far_sig_b_sticky = Bool()
   val far_exp_a_vec = Vec.fill(3)(UInt(expWidth bits))
 
@@ -141,17 +144,20 @@ class FCMA_ADD_s1_to_s2(val expWidth: Int, val precision: Int, val outPc: Int)
   val sel_far_path = Bool()
 
   override def asMaster(): Unit = {
-    out(rm, far_path_out, near_path_out, small_add, far_path_mul_of, far_sig_a, far_sig_b, far_sig_b_sticky, far_exp_a_vec, near_path_sig_is_zero, near_path_lza_error, near_path_int_bit, near_path_sig_raw, near_path_lzc, sel_far_path)
+    out(rm, far_path_out, near_path_out, special_case,
+      small_add, far_path_mul_of, far_sig_a, far_sig_b, far_sig_b_sticky, far_exp_a_vec,
+      near_path_sig_is_zero, near_path_lza_error, near_path_int_bit, near_path_sig_raw, near_path_lzc, sel_far_path)
   }
 }
 
 
 class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
   extends TLModule {
-
+  // 1 for the sign bit
+  val manWidthWithHiddenOne = precision + 1
+  val inputWidth = expWidth + manWidthWithHiddenOne
   val io = new Bundle() {
-    val a, b = in port UInt(expWidth + precision bits)
-    val b_inter_valid = in port Bool()
+    val a, b = in port UInt(inputWidth bits)
     val rm = in port UInt(3 bits)
     val outx = master(new FCMA_ADD_s1_to_s2(expWidth, precision, outPc))
   }
@@ -162,6 +168,7 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
   val decode_b = fp_b.decode
   val raw_a = RawFloat.fromFP(fp_a, Some(decode_a.expNotZero))
   val raw_b = RawFloat.fromFP(fp_b, Some(decode_b.expNotZero))
+  // raw_float: 1 bit sign, expWidth bits exponent, & manWidth + 1 bits mantissa
   val eff_sub = raw_a.sign ^ raw_b.sign
 
   val small_add = decode_a.expIsZero && decode_b.expIsZero
@@ -195,7 +202,7 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
     (
       Mux(!need_swap, raw_a, raw_b),
       Mux(!need_swap, raw_b, raw_a),
-      Mux(!need_swap, exp_diff_a_b, exp_diff_b_a)
+      Mux(!need_swap, exp_diff_a_b, exp_diff_b_a).resize(expWidth)
     )
   )
 
@@ -260,10 +267,11 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
 
 class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   extends TLModule {
-
+  // 1 for the sign bit
+  val outputWidth = expWidth + outPc + 1
   val io = new Bundle() {
     val in = slave(new FCMA_ADD_s1_to_s2(expWidth, precision, outPc))
-    val result = out port UInt(expWidth + outPc bits)
+    val result = out port UInt(outputWidth bits)
     val fflags = out port UInt(5 bits)
   }
 
@@ -285,7 +293,7 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
 
   // Far Path
   val far_path_res = cloneOf(io.in.far_path_out)
-  far_path_res := io.in.far_path_out
+  far_path_res.sign := io.in.far_path_out.sign
 
   val adder_in_sig_b = io.in.far_sig_b
   val adder_in_sig_a = Cat(U(0, 1 bits), io.in.far_sig_a, U(0, 3 bits)).asUInt
@@ -298,9 +306,9 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   far_path_res.mantissa := MuxOH(
     Vec(cout, keep || small_add, cancellation && !small_add),
     Vec(
-      adder_result(adder_result.getWidth - 1 downto adder_result.getWidth - (outPc + 2)) ## adder_result.resize(adder_result.getWidth - (outPc + 2)).orR,
-      adder_result.resize(adder_result.getWidth - 1)(adder_result.getWidth - 1 downto adder_result.getWidth - (outPc + 2)) ## adder_result.resize(adder_result.getWidth - (outPc + 3)).orR,
-      adder_result.resize(adder_result.getWidth - 2)(adder_result.getWidth - 1 downto adder_result.getWidth - (outPc + 2)) ## adder_result.resize(adder_result.getWidth - (outPc + 4)).orR
+      adder_result.asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 2).orR,
+      adder_result.trim(1).asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 3).orR,
+      adder_result.trim(2).asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 4).orR
     )
   )
 
@@ -346,7 +354,7 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
 
   // val near_path_res = io.in.near_path_out
   val near_path_res = cloneOf(io.in.near_path_out)
-  near_path_res := io.in.near_path_out
+  near_path_res.sign := io.in.near_path_out.sign
   val near_path_sign = near_path_res.sign
   val near_path_exp = near_path_res.exponent
   // val near_path_sig = near_path_res.sig
@@ -360,7 +368,7 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   near_path_res.exponent := Mux(io.in.near_path_int_bit, exp_s2, U(0)).asBits
 
   val sig_s1 = (io.in.near_path_sig_raw << lzc)(precision downto 0)
-  val sig_s2 = Mux(io.in.near_path_lza_error, Cat(sig_s1.resize(sig_s1.getWidth - 1), U(0, 1 bits)), sig_s1)
+  val sig_s2 = Mux(io.in.near_path_lza_error, Cat(sig_s1.resize(sig_s1.getWidth - 1), U(0, 1 bits)).asUInt, sig_s1)
   val near_path_sig_cor = if (outPc + 3 > precision + 1) {
     Cat(
       sig_s2,
@@ -437,11 +445,14 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
 }
 
 class FCMA_ADD(val expWidth: Int, val precision: Int, val outPc: Int) extends TLModule {
+  // 1 for the sign bit
+  val inputWidth = expWidth + precision + 1
+  val outputWidth = expWidth + outPc + 1
   val io = new Bundle() {
-    val a, b = in port (UInt((expWidth + precision) bits))
-    val rm = in port (UInt(3 bits))
-    val result = out port (UInt((expWidth + outPc) bits))
-    val fflags = out port (UInt(5 bits))
+    val a, b = in port UInt(inputWidth bits)
+    val rm = in port UInt(3 bits)
+    val result = out port UInt(outputWidth bits)
+    val fflags = out port UInt(5 bits)
   }
 
   val fadd_s1 = new FCMA_ADD_s1(expWidth, precision, outPc)
@@ -460,9 +471,11 @@ class FCMA_ADD(val expWidth: Int, val precision: Int, val outPc: Int) extends TL
 
 class FADD(val expWidth: Int, val precision: Int) extends TLModule {
   val io = new Bundle() {
-    val a, b = in port UInt((expWidth + precision) bits)
+    // 1 for the sign bit
+    val inputWidth = expWidth + precision + 1
+    val a, b = in port UInt(inputWidth bits)
     val rm = in port UInt(3 bits)
-    val result = out port UInt((expWidth + precision) bits)
+    val result = out port UInt(inputWidth bits)
     val fflags = out port UInt(5 bits)
   }
 

@@ -140,10 +140,12 @@ object Floating {
 
   /* Uint to Float Point */
   def fromUInt(x: UInt, expWidth: Int, manWidth: Int): Floating = {
+    // typical setting: expWidth=8, manWidth=23
     val fp = new Floating(expWidth, manWidth)
-    fp.sign := x(expWidth + manWidth)
-    fp.exponent := x(expWidth + manWidth - 1 downto manWidth).asBits
-    fp.mantissa := x(manWidth - 1 downto 0).asBits
+    val xBits = x.asBits
+    fp.sign := xBits(expWidth + manWidth)
+    fp.exponent := xBits(expWidth + manWidth - 1 downto manWidth)
+    fp.mantissa := xBits.resize(manWidth)
     fp
   }
 
@@ -157,9 +159,11 @@ object Floating {
   }
 }
 
-class RawFloat(exponentSize: Int,
+// it must be a case class, or the cloneOf method cannot retrieve the construction param of such a Bundle
+case class RawFloat(exponentSize: Int,
                mantissaSize: Int) extends Bundle {
   // here, the mantissa field CONTAINS the implicit first bit
+  // hence the width of a RawFloat is 33 bits, not 32 bits
   val sign = Bool()
   val exponent = Bits(exponentSize bits)
   val mantissa = Bits(mantissaSize bits)
@@ -168,7 +172,7 @@ class RawFloat(exponentSize: Int,
 /* let the floating to the RawFloat*/
 object RawFloat {
   def fromFP(fp: Floating, expNotZero: Option[Bool] = None): RawFloat = {
-    val inner = new RawFloat(fp.exponentSize, fp.mantissaSize + 1)
+    val inner = RawFloat(fp.exponentSize, fp.mantissaSize + 1)
     val nz = if (expNotZero.isDefined) expNotZero.get else fp.exponent.orR
     inner.sign := fp.sign
     inner.exponent := Mux(nz, fp.exponent, B(1, fp.exponentSize bits))
