@@ -6,18 +6,65 @@ import spinal.lib._
 
 import scala.language.postfixOps
 
-class Fadd_spcial_info extends Bundle {
+//============================================       INTERFACES        ============================================//
+
+case class FPU_IF(expWidth: Int, precision: Int) extends Bundle with IMasterSlave {
+  // 1 for the sign bit
+  val inputWidth = expWidth + precision + 1
+
+  val a, b = UInt(inputWidth bits)
+  val rm = UInt(3 bits) // round mode
+  val result = UInt(inputWidth bits)
+  val fflags = UInt(5 bits)
+
+  def asMaster(): Unit = {
+    in(a, b, rm)
+    out(result, fflags)
+  }
+}
+
+case class FPU_ADD_Special_Info() extends Bundle {
   val iv = Bool()
   val nan = Bool()
   val inf_sign = Bool()
 }
 
+case class FPU_ADD_s1_to_s2(expWidth: Int, precision: Int, outPc: Int)
+  extends Bundle with IMasterSlave {
+  val manWidthWithHiddenOne = precision + 1
+  val rm = UInt(3 bits)
+  val far_path_out = RawFloat(expWidth, outPc + 3)
+  val near_path_out = RawFloat(expWidth, outPc + 3)
+  val special_case = Flow(FPU_ADD_Special_Info())
 
-class FarPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
+  // far path addtitional
+  val small_add = Bool()
+  val far_path_mul_of = Bool()
+  val far_sig_a = UInt(manWidthWithHiddenOne bits)
+  val far_sig_b = UInt(manWidthWithHiddenOne + 4 bits)
+  val far_sig_b_sticky = Bool()
+  val far_exp_a_vec = Vec.fill(3)(UInt(expWidth bits))
+
+  // near path additional
+  val near_path_sig_is_zero = Bool()
+  val near_path_lza_error = Bool()
+  val near_path_int_bit = Bool()
+  val near_path_sig_raw = UInt(precision + 1 bits)
+  val near_path_lzc = UInt(log2Up(precision + 1) bits)
+  val sel_far_path = Bool()
+
+  override def asMaster(): Unit = {
+    out(rm, far_path_out, near_path_out, special_case,
+      small_add, far_path_mul_of, far_sig_a, far_sig_b, far_sig_b_sticky, far_exp_a_vec,
+      near_path_sig_is_zero, near_path_lza_error, near_path_int_bit, near_path_sig_raw, near_path_lzc, sel_far_path)
+  }
+}
+//============================================       MODULES        ============================================//
+
+case class FPU_ADD_Far_Path(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
   val manWidthWithHiddenOne = precision + 1
   val io = new Bundle {
-    val a = in port RawFloat(expWidth, manWidthWithHiddenOne) // to include the hidden one in the mantissa field
-    val b = in port RawFloat(expWidth, manWidthWithHiddenOne)
+    val a, b = in port RawFloat(expWidth, manWidthWithHiddenOne) // to include the hidden one in the mantissa field
     val exp_diff = in port UInt(expWidth bits)
     val expSub = in port Bool()
 
@@ -39,15 +86,14 @@ class FarPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
   io.a_exps(1) := io.a.exponent.asUInt
   io.a_exps(2) := io.a.exponent.asUInt - 1
   io.result.sign := io.a.sign
-  io.result.exponent := 0
-  io.result.mantissa := 0
+  io.result.exponent := 0 // don't care
+  io.result.mantissa := 0 // don't care
 }
 
-class NearPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
+case class FPU_ADD_Near_Path(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
   val manWidthWithHiddenOne = precision + 1
   val io = new Bundle {
-    val a = in port RawFloat(expWidth, manWidthWithHiddenOne) // same reason as the FarPath module
-    val b = in port RawFloat(expWidth, manWidthWithHiddenOne)
+    val a, b = in port RawFloat(expWidth, manWidthWithHiddenOne) // same reason as the FarPath module
     val need_shift_b = in port Bool()
     val rm = in port UInt(3 bits)
 
@@ -64,16 +110,16 @@ class NearPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
   val b_sig = ((io.b.mantissa ## B"1'b0") >> io.need_shift_b.asUInt).asUInt
   val b_neg = (~b_sig.asBits).asUInt
 
-  val a_minus_b = (B"1'b0" ## a_sig).asUInt + (B"1'b1" ## b_neg).asUInt + U(1, 1 + a_sig.getWidth bits)
+  val a_minus_b = a_sig.expand + (B"1'b1" ## b_neg).asUInt + 1
   val a_lt_b = a_minus_b.lsb
   val sig_raw = a_minus_b.resize(outPC + 1)
   val lza_str = LZA(a_sig, b_neg).resize(manWidthWithHiddenOne)
   val lza_str_zero = !lza_str.orR
 
-  val need_shift_lim = io.a.exponent.asUInt < U(precision + 1, io.a.exponent.getWidth bits)
+  val need_shift_lim = io.a.exponent.asUInt < U(precision + 1)
   val mask_able_k_width = log2Up(precision + 1)
   val shift_lim_mask_raw = ((B"1'b1" ## B(0, precision + 1 bits)) >> io.a.exponent.resize(mask_able_k_width).asUInt).asUInt.resize(precision + 1)
-  val shift_lim_mask = Mux(need_shift_lim, shift_lim_mask_raw, U(0, shift_lim_mask_raw.getWidth bits))
+  val shift_lim_mask = Mux(need_shift_lim, shift_lim_mask_raw, U(0).resized)
   val shift_lim_bit = (shift_lim_mask_raw & sig_raw).orR
 
   val lzc_str = shift_lim_mask | lza_str
@@ -108,7 +154,7 @@ class NearPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
   val result = RawFloat(expWidth, outPC + 3)
   result.sign := near_path_sign
   result.exponent := io.a.exponent
-  result.mantissa := 0
+  result.mantissa := 0 // don't care
 
   io.result := result
   io.sig_is_zero := lza_str_zero && !sig_raw(0)
@@ -119,39 +165,7 @@ class NearPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
   io.int_bit := int_bit
 }
 
-class FCMA_ADD_s1_to_s2(val expWidth: Int, val precision: Int, val outPc: Int)
-  extends Bundle with IMasterSlave {
-  val manWidthWithHiddenOne = precision + 1
-  val rm = UInt(3 bits)
-  val far_path_out = RawFloat(expWidth, outPc + 3)
-  val near_path_out = RawFloat(expWidth, outPc + 3)
-  val special_case = Flow(new Fadd_spcial_info)
-
-  // far path addtitional
-  val small_add = Bool()
-  val far_path_mul_of = Bool()
-  val far_sig_a = UInt(manWidthWithHiddenOne bits)
-  val far_sig_b = UInt(manWidthWithHiddenOne + 4 bits)
-  val far_sig_b_sticky = Bool()
-  val far_exp_a_vec = Vec.fill(3)(UInt(expWidth bits))
-
-  // near path additional
-  val near_path_sig_is_zero = Bool()
-  val near_path_lza_error = Bool()
-  val near_path_int_bit = Bool()
-  val near_path_sig_raw = UInt(precision + 1 bits)
-  val near_path_lzc = UInt(log2Up(precision + 1) bits)
-  val sel_far_path = Bool()
-
-  override def asMaster(): Unit = {
-    out(rm, far_path_out, near_path_out, special_case,
-      small_add, far_path_mul_of, far_sig_a, far_sig_b, far_sig_b_sticky, far_exp_a_vec,
-      near_path_sig_is_zero, near_path_lza_error, near_path_int_bit, near_path_sig_raw, near_path_lzc, sel_far_path)
-  }
-}
-
-
-class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
+case class FPU_ADD_s1(expWidth: Int, precision: Int, outPc: Int)
   extends TLModule {
   // 1 for the sign bit
   val manWidthWithHiddenOne = precision + 1
@@ -159,7 +173,7 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
   val io = new Bundle() {
     val a, b = in port UInt(inputWidth bits)
     val rm = in port UInt(3 bits)
-    val outx = master(new FCMA_ADD_s1_to_s2(expWidth, precision, outPc))
+    val outx = master(FPU_ADD_s1_to_s2(expWidth, precision, outPc))
   }
 
   val fp_a = Floating.fromUInt(io.a, expWidth, precision)
@@ -186,8 +200,8 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
   val special_case_happen = special_path_hasNaN || special_path_hasInf
   val special_path_iv = special_path_hasSNaN || special_path_inf_iv
 
-  val exp_diff_a_b = (B"1'b0" ## raw_a.exponent).asUInt - (B"1'b0" ## raw_b.exponent).asUInt
-  val exp_diff_b_a = (B"1'b0" ## raw_b.exponent).asUInt - (B"1'b0" ## raw_a.exponent).asUInt
+  val exp_diff_a_b = raw_a.exponent.asUInt.expand - raw_b.exponent.asUInt.expand
+  val exp_diff_b_a = raw_b.exponent.asUInt.expand - raw_a.exponent.asUInt.expand
 
   val need_swap = exp_diff_a_b.msb
 
@@ -198,23 +212,20 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
         Far path
    */
 
-  val far_path_inputs = Seq(
-    (
-      Mux(!need_swap, raw_a, raw_b),
-      Mux(!need_swap, raw_b, raw_a),
-      Mux(!need_swap, exp_diff_a_b, exp_diff_b_a).resize(expWidth)
-    )
+  val far_path_input = (
+    Mux(!need_swap, raw_a, raw_b),
+    Mux(!need_swap, raw_b, raw_a),
+    Mux(!need_swap, exp_diff_a_b, exp_diff_b_a).resize(expWidth)
   )
 
-  val far_path_mods = far_path_inputs.map { in =>
-    val far_path = new FarPath(expWidth, precision, outPc)
-    far_path.io.a := in._1
-    far_path.io.b := in._2
-    far_path.io.exp_diff := in._3
+  val far_path_mods = {
+    val far_path = FPU_ADD_Far_Path(expWidth, precision, outPc)
+    far_path.io.a := far_path_input._1
+    far_path.io.b := far_path_input._2
+    far_path.io.exp_diff := far_path_input._3
     far_path.io.expSub := eff_sub
     far_path
   }
-  val far_path_res = far_path_mods.head.io.result
 
   /*
         Near path
@@ -227,7 +238,7 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
     (raw_b, raw_a, near_path_exp_neq)
   )
   val near_path_mods = near_path_inputs.map { in =>
-    val near_path = new NearPath(expWidth, precision, outPc)
+    val near_path = FPU_ADD_Near_Path(expWidth, precision, outPc)
     near_path.io.a := in._1
     near_path.io.b := in._2
     near_path.io.need_shift_b := in._3
@@ -241,12 +252,12 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
   io.outx.small_add := small_add
   io.outx.sel_far_path := sel_far_path
 
-  io.outx.far_path_out := far_path_mods.head.io.result
+  io.outx.far_path_out := far_path_mods.io.result
   io.outx.far_path_mul_of := decode_b.expIsOnes && !eff_sub
-  io.outx.far_sig_a := far_path_mods.head.io.a_mantissa
-  io.outx.far_sig_b := far_path_mods.head.io.b_mantissa
-  io.outx.far_sig_b_sticky := far_path_mods.head.io.b_sticky
-  io.outx.far_exp_a_vec := far_path_mods.head.io.a_exps
+  io.outx.far_sig_a := far_path_mods.io.a_mantissa
+  io.outx.far_sig_b := far_path_mods.io.b_mantissa
+  io.outx.far_sig_b_sticky := far_path_mods.io.b_sticky
+  io.outx.far_exp_a_vec := far_path_mods.io.a_exps
 
   val sel_out = need_swap || (!near_path_exp_neq && near_path_a_lt_b)
 
@@ -265,12 +276,12 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
 }
 
 // ieee floar: expWidth = 8, precision = 23, outPc = 23
-class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
+case class FPU_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   extends TLModule {
   // 1 for the sign bit
   val outputWidth = expWidth + outPc + 1
   val io = new Bundle() {
-    val in = slave(new FCMA_ADD_s1_to_s2(expWidth, precision, outPc))
+    val in = slave(FPU_ADD_s1_to_s2(expWidth, precision, outPc))
     val result = out port UInt(outputWidth bits)
     val fflags = out port UInt(5 bits)
   }
@@ -282,14 +293,14 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   val special_path_result = Mux(
     special_case.payload.nan,
     Floating.defaultNaNUInt(expWidth, outPc).asBits.asUInt,
-    Cat(
-      special_case.payload.inf_sign,
-      ~U(0, expWidth bits),
-      U(0, outPc - 1 bits)
-    ).asUInt
+    (
+      special_case.payload.inf_sign ##
+        ~U(0, expWidth bits) ##
+        U(0, outPc - 1 bits)
+      ).asUInt
   )
   val special_path_iv = special_case.payload.iv
-  val special_path_fflags = Cat(special_path_iv, U"4'b0")
+  val special_path_fflags = special_path_iv ## U"4'b0"
 
   // Far Path
   val far_path_res = cloneOf(io.in.far_path_out)
@@ -297,7 +308,7 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
 
   val adder_in_sig_b = io.in.far_sig_b
   // add extra bits and G, R, S bits
-  val adder_in_sig_a = (B"1'b0" ## io.in.far_sig_a ## B"3'b0").asUInt
+  val adder_in_sig_a = (io.in.far_sig_a.expand ## B"3'b0").asUInt
   val adder_result = adder_in_sig_a + adder_in_sig_b
 
   val cout = adder_result.msb
@@ -325,10 +336,7 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   val far_path_exp = far_path_res.exponent
   val far_path_sig = far_path_res.mantissa
 
-  val far_path_tininess_rounder = new TininessRounder(expWidth, outPc)
-  far_path_tininess_rounder.io.inx := far_path_res
-  far_path_tininess_rounder.io.rm := io.in.rm
-  val far_path_tininess = small_add && far_path_tininess_rounder.io.tininess
+  val far_path_tininess = small_add && TininessRounder(expWidth, outPc, far_path_res, io.in.rm)
 
   val far_path_rounder = RoundingUnit(
     far_path_sig.asUInt.trim(1), // remove the hidden one
@@ -385,10 +393,7 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   val near_path_sig = near_path_sig_cor.asBits.resizeLeft(outPc + 2) ## near_path_sig_cor.trim(outPc + 2).orR
   near_path_res.mantissa := near_path_sig
 
-  val near_path_tininess_rounder = new TininessRounder(expWidth, outPc)
-  near_path_tininess_rounder.io.inx := near_path_res
-  near_path_tininess_rounder.io.rm := io.in.rm
-  val near_path_tininess = near_path_tininess_rounder.io.tininess
+  val near_path_tininess = TininessRounder(expWidth, outPc, near_path_res, io.in.rm)
 
   val near_path_rounder = RoundingUnit(
     near_path_sig.resize(near_path_sig.getWidth - 1).asUInt,
@@ -449,19 +454,13 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   io.fflags := Mux(special_case_happen, special_path_fflags, common_fflags).asUInt
 }
 
-class FCMA_ADD(val expWidth: Int, val precision: Int, val outPc: Int) extends TLModule {
-  // 1 for the sign bit
-  val inputWidth = expWidth + precision + 1
-  val outputWidth = expWidth + outPc + 1
-  val io = new Bundle() {
-    val a, b = in port UInt(inputWidth bits)
-    val rm = in port UInt(3 bits)
-    val result = out port UInt(outputWidth bits)
-    val fflags = out port UInt(5 bits)
-  }
+case class FPU_ADD(expWidth: Int, precision: Int) extends TLModule {
+  val outPc = precision
 
-  val fadd_s1 = new FCMA_ADD_s1(expWidth, precision, outPc)
-  val fadd_s2 = new FCMA_ADD_s2(expWidth, precision, outPc)
+  val io = master(FPU_IF(expWidth, precision))
+
+  val fadd_s1 = FPU_ADD_s1(expWidth, precision, outPc)
+  val fadd_s2 = FPU_ADD_s2(expWidth, precision, outPc)
 
   fadd_s1.io.a := io.a
   fadd_s1.io.b := io.b
@@ -471,24 +470,4 @@ class FCMA_ADD(val expWidth: Int, val precision: Int, val outPc: Int) extends TL
 
   io.result := fadd_s2.io.result
   io.fflags := fadd_s2.io.fflags
-}
-
-
-class FADD(val expWidth: Int, val precision: Int) extends TLModule {
-  // 1 for the sign bit
-  val inputWidth = expWidth + precision + 1
-  val io = new Bundle() {
-    val a, b = in port UInt(inputWidth bits)
-    val rm = in port UInt(3 bits) // round mode
-    val result = out port UInt(inputWidth bits)
-    val fflags = out port UInt(5 bits)
-  }
-
-  val module = new FCMA_ADD(expWidth, precision, precision)
-
-  module.io.a := io.a
-  module.io.b := io.b
-  module.io.rm := io.rm
-  io.result := module.io.result
-  io.fflags := module.io.fflags
 }

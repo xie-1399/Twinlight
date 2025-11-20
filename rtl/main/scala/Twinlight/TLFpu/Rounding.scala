@@ -83,7 +83,7 @@ object RoundingUnit {
 class TininessRounder(expWidth: Int, precision: Int) extends TLModule {
 
   val io = new Bundle() {
-    val inx = in port new RawFloat(expWidth, precision + 3)
+    val inx = in port RawFloat(expWidth, precision + 3)
     val rm = in port UInt(3 bits)
     val tininess = out port Bool()
   }
@@ -99,4 +99,13 @@ class TininessRounder(expWidth: Int, precision: Int) extends TLModule {
     ((io.inx.mantissa(io.inx.mantissa.getWidth - 1 downto io.inx.mantissa.getWidth - 2) === B(1, 2 bits)) && !rounder.io.cout)
 
   io.tininess := tininess
+}
+
+object TininessRounder{
+  def apply(expWidth: Int, precision: Int, in: RawFloat, rm: UInt): Bool = {
+    val tininess_rounder = new TininessRounder(expWidth, precision)
+    tininess_rounder.io.inx := in
+    tininess_rounder.io.rm := rm
+    tininess_rounder.io.tininess
+  }
 }

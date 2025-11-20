@@ -23,7 +23,7 @@ class Fadd32Test extends AnyFunSuite {
 
   test("Fadd32 random test") {
     SIMCFG().compile {
-      val dut = new FADD(expWidth = 8, precision = 23)
+      val dut = FPU_ADD(expWidth = 8, precision = 23)
       dut
     }.doSimUntilVoid {
       dut =>
@@ -36,12 +36,12 @@ class Fadd32Test extends AnyFunSuite {
             val gen = new Random()
             val tool = BasicFloatTools()
             val err = Array.tabulate(testCase)({ i =>
-              val a = gen.nextFloat() * (1024000111 >> ((i + 0) % 32))
-              val b = gen.nextFloat() * (1024000111 >> ((i + 7) % 32))
-              dut.io.a #= tool.FP2Int(a)
-              dut.io.b #= tool.FP2Int(b)
+              val a = (gen.nextFloat() - 0.0f) * (1024000111 >> ((i + 0) % 32))
+              val b = (gen.nextFloat() - 0.0f) * (1024000111 >> ((i + 7) % 32))
+              dut.io.a #= BigInt(tool.FP2Int(a))
+              dut.io.b #= BigInt(tool.FP2Int(b))
               dut.io.rm #= 0
-              dut.clockDomain.waitSampling(2)
+              dut.clockDomain.waitSampling(1)
               // check
               val res = dut.io.result.toBigInt
               val std_res = tool.FP2Int(a + b)
