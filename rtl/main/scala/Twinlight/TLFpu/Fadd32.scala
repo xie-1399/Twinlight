@@ -60,19 +60,19 @@ class NearPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
     val lzc = out port UInt(log2Up(manWidthWithHiddenOne) bits)
   }
 
-  val a_sig = (io.a.mantissa ## B(0, 1 bits)).asUInt
-  val b_sig = ((io.b.mantissa ## U(0, 1 bits)) >> io.need_shift_b.asUInt).asUInt
+  val a_sig = (io.a.mantissa ## B"1'b0").asUInt
+  val b_sig = ((io.b.mantissa ## B"1'b0") >> io.need_shift_b.asUInt).asUInt
   val b_neg = (~b_sig.asBits).asUInt
 
-  val a_minus_b = (U(0, 1 bits) ## a_sig).asUInt + (U(1, 1 bits) ## b_neg).asUInt + U(1, 1 + a_sig.getWidth bits)
+  val a_minus_b = (B"1'b0" ## a_sig).asUInt + (B"1'b1" ## b_neg).asUInt + U(1, 1 + a_sig.getWidth bits)
   val a_lt_b = a_minus_b.lsb
-  val sig_raw = a_minus_b.asBits(outPC downto 0).asUInt
+  val sig_raw = a_minus_b.resize(outPC + 1)
   val lza_str = LZA(a_sig, b_neg).resize(manWidthWithHiddenOne)
   val lza_str_zero = !lza_str.orR
 
   val need_shift_lim = io.a.exponent.asUInt < U(precision + 1, io.a.exponent.getWidth bits)
   val mask_able_k_width = log2Up(precision + 1)
-  val shift_lim_mask_raw = ((B(1, 1 bits) ## B(0, precision + 1 bits)) >> io.a.exponent(mask_able_k_width - 1 downto 0).asUInt).asUInt(precision downto 0)
+  val shift_lim_mask_raw = ((B"1'b1" ## B(0, precision + 1 bits)) >> io.a.exponent.resize(mask_able_k_width).asUInt).asUInt.resize(precision + 1)
   val shift_lim_mask = Mux(need_shift_lim, shift_lim_mask_raw, U(0, shift_lim_mask_raw.getWidth bits))
   val shift_lim_bit = (shift_lim_mask_raw & sig_raw).orR
 
@@ -83,18 +83,18 @@ class NearPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
     if (i == precision) {
       lzc_str(i)
     } else {
-      lzc_str(i) & !lzc_str(precision - 1 - i downto 0).orR
+      lzc_str(i) & !lzc_str.resize(precision - i).orR
     }
   })
 
   val int_bit_predicted = (int_bit_mask.map({ i => i | lza_str_zero }).asBits & sig_raw.asBits).orR
-  val int_bit_rshift_1 = ((int_bit_mask.asBits >> U(1, 1 bits)).asUInt & sig_raw).orR
+  val int_bit_rshift_1 = ((int_bit_mask.asBits >> U"1'b1").asUInt & sig_raw).orR
 
   val exceed_lim_mask = Vec.tabulate(precision + 1)({ i =>
     if (i == precision) {
       False
     } else {
-      lza_str(precision - 1 - i downto 0).orR
+      lza_str.resize(precision - i).orR
     }
   })
 
@@ -186,8 +186,8 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
   val special_case_happen = special_path_hasNaN || special_path_hasInf
   val special_path_iv = special_path_hasSNaN || special_path_inf_iv
 
-  val exp_diff_a_b = (B(0, 1 bits) ## raw_a.exponent).asUInt - (B(0, 1 bits) ## raw_b.exponent).asUInt
-  val exp_diff_b_a = (B(0, 1 bits) ## raw_b.exponent).asUInt - (B(0, 1 bits) ## raw_a.exponent).asUInt
+  val exp_diff_a_b = (B"1'b0" ## raw_a.exponent).asUInt - (B"1'b0" ## raw_b.exponent).asUInt
+  val exp_diff_b_a = (B"1'b0" ## raw_b.exponent).asUInt - (B"1'b0" ## raw_a.exponent).asUInt
 
   val need_swap = exp_diff_a_b.msb
 
@@ -220,7 +220,7 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
         Near path
    */
 
-  val near_path_exp_neq = raw_a.exponent(1 downto 0) =/= raw_b.exponent(1 downto 0)
+  val near_path_exp_neq = raw_a.exponent.resize(2) =/= raw_b.exponent.resize(2)
 
   val near_path_inputs = Seq(
     (raw_a, raw_b, near_path_exp_neq),
@@ -289,7 +289,7 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
     ).asUInt
   )
   val special_path_iv = special_case.payload.iv
-  val special_path_fflags = Cat(special_path_iv, U(0, 4 bits))
+  val special_path_fflags = Cat(special_path_iv, U"4'b0")
 
   // Far Path
   val far_path_res = cloneOf(io.in.far_path_out)
@@ -311,7 +311,7 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
     //                [2, 4),    needs to shift right 1 bit
     Vec(cout, keep || small_add, cancellation && !small_add),
     Vec( // ???
-      adder_result.asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 2).orR,  // >> 1
+      adder_result.asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 2).orR, // >> 1
       adder_result.trim(1).asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 3).orR, // keep
       adder_result.trim(2).asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 4).orR // << 1?
     )
@@ -373,16 +373,16 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   near_path_res.exponent := Mux(io.in.near_path_int_bit, exp_s2, U(0)).asBits
 
   val sig_s1 = (io.in.near_path_sig_raw << lzc)(precision downto 0)
-  val sig_s2 = Mux(io.in.near_path_lza_error, Cat(sig_s1.resize(sig_s1.getWidth - 1), U(0, 1 bits)).asUInt, sig_s1)
+  val sig_s2 = Mux(io.in.near_path_lza_error, Cat(sig_s1.resize(sig_s1.getWidth - 1), U"1'b0").asUInt, sig_s1)
   val near_path_sig_cor = if (outPc + 3 > precision + 1) {
     Cat(
       sig_s2,
       U(0, outPc + 3 - precision - 1 bits)
-    )
+    ).asUInt
   } else {
     sig_s2
   }
-  val near_path_sig = near_path_sig_cor(near_path_sig_cor.getWidth - 1 downto near_path_sig_cor.getWidth - (outPc + 2)) ## near_path_sig_cor.resize(near_path_sig_cor.getWidth - (outPc + 2)).orR
+  val near_path_sig = near_path_sig_cor.asBits.resizeLeft(outPc + 2) ## near_path_sig_cor.trim(outPc + 2).orR
   near_path_res.mantissa := near_path_sig
 
   val near_path_tininess_rounder = new TininessRounder(expWidth, outPc)
@@ -418,8 +418,8 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   val rmin = RoundingUnit.is_rmin(io.in.rm, far_path_res.sign)
   val common_overflow_exp = Mux(
     rmin,
-    U(((BigInt(1) << expWidth) - 2), expWidth bits),
-    U(((BigInt(1) << expWidth) - 1), expWidth bits)
+    U((BigInt(1) << expWidth) - 2, expWidth bits),
+    U((BigInt(1) << expWidth) - 1, expWidth bits)
   )
   val common_overflow_sig = rmin ?
     B((1 << outPc) - 1, outPc bits) |
