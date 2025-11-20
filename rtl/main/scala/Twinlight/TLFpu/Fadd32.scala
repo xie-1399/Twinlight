@@ -22,14 +22,14 @@ class FarPath(expWidth: Int, precision: Int, outPC: Int) extends TLModule {
     val expSub = in port Bool()
 
     val a_mantissa = out port UInt(manWidthWithHiddenOne bits)
-    val b_mantissa = out port UInt(manWidthWithHiddenOne + 4 bits) // manWidth + G, R, S bits + sign bit
+    val b_mantissa = out port UInt(manWidthWithHiddenOne + 4 bits) // manWidth + G, R, S bits + ext bit
     val b_sticky = out port Bool()
     val a_exps = out port Vec.fill(3)(UInt(expWidth bits))
     val result = out port RawFloat(expWidth, outPC + 3)
   }
-  val (b_shifted, b_sticky) = ShiftRightJam(io.b.mantissa ## B(0, 2 bits), io.exp_diff)
+  val (b_shifted, b_sticky) = ShiftRightJam(io.b.mantissa ## B"2'b0", io.exp_diff)
 
-  val b_mantissa_raw = B(0, 1 bits) ## b_shifted ## b_sticky
+  val b_mantissa_raw = B"1'b0" ## b_shifted ## b_sticky
   val b_mantissa = Mux(io.expSub, ~b_mantissa_raw, b_mantissa_raw).asUInt + io.expSub.asUInt
 
   io.a_mantissa := io.a.mantissa.asUInt
@@ -264,7 +264,7 @@ class FCMA_ADD_s1(val expWidth: Int, val precision: Int, val outPc: Int)
 
 }
 
-
+// ieee floar: expWidth = 8, precision = 23, outPc = 23
 class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   extends TLModule {
   // 1 for the sign bit
@@ -296,19 +296,24 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   far_path_res.sign := io.in.far_path_out.sign
 
   val adder_in_sig_b = io.in.far_sig_b
-  val adder_in_sig_a = Cat(U(0, 1 bits), io.in.far_sig_a, U(0, 3 bits)).asUInt
+  // add extra bits and G, R, S bits
+  val adder_in_sig_a = (B"1'b0" ## io.in.far_sig_a ## B"3'b0").asUInt
   val adder_result = adder_in_sig_a + adder_in_sig_b
 
   val cout = adder_result.msb
-  val keep = adder_result(adder_result.getWidth - 1 downto adder_result.getWidth - 2) === U(1, 2 bits)
-  val cancellation = adder_result(adder_result.getWidth - 1 downto adder_result.getWidth - 2) === U(1, 2 bits)
+  val keep = adder_result.asBits.resizeLeft(2) === B"2'b01"
+  val cancellation = adder_result.asBits.resizeLeft(2) === B"2'b00"
 
+  // Mux One Hot
   far_path_res.mantissa := MuxOH(
+    // result in this case must fall in [1, 4)
+    // if it falls in [1, 2), it does not need further operations
+    //                [2, 4),    needs to shift right 1 bit
     Vec(cout, keep || small_add, cancellation && !small_add),
-    Vec(
-      adder_result.asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 2).orR,
-      adder_result.trim(1).asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 3).orR,
-      adder_result.trim(2).asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 4).orR
+    Vec( // ???
+      adder_result.asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 2).orR,  // >> 1
+      adder_result.trim(1).asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 3).orR, // keep
+      adder_result.trim(2).asBits.resizeLeft(outPc + 2) ## adder_result.trim(outPc + 4).orR // << 1?
     )
   )
 
@@ -326,10 +331,10 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   val far_path_tininess = small_add && far_path_tininess_rounder.io.tininess
 
   val far_path_rounder = RoundingUnit(
-    far_path_sig.resize(far_path_sig.getWidth - 1).asUInt,
+    far_path_sig.asUInt.trim(1), // remove the hidden one
     io.in.rm,
     far_path_res.sign,
-    outPc - 1
+    outPc
   )
 
   val far_path_exp_rounded = far_path_rounder.io.cout.asUInt + far_path_exp.asUInt
@@ -389,7 +394,7 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
     near_path_sig.resize(near_path_sig.getWidth - 1).asUInt,
     io.in.rm,
     near_path_res.sign,
-    outPc - 1
+    outPc
   )
 
   val near_path_exp_rounded = near_path_rounder.io.cout.asUInt + near_path_exp.asUInt
@@ -417,8 +422,8 @@ class FCMA_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
     U(((BigInt(1) << expWidth) - 1), expWidth bits)
   )
   val common_overflow_sig = rmin ?
-    B((1 << (outPc - 1)) - 1, outPc - 1 bits) |
-    U(0, outPc - 1 bits).asBits
+    B((1 << outPc) - 1, outPc bits) |
+    U(0, outPc bits).asBits
 
   val common_underflow =
     sel_far_path && far_path_uf || !sel_far_path && near_path_uf
@@ -470,11 +475,11 @@ class FCMA_ADD(val expWidth: Int, val precision: Int, val outPc: Int) extends TL
 
 
 class FADD(val expWidth: Int, val precision: Int) extends TLModule {
+  // 1 for the sign bit
+  val inputWidth = expWidth + precision + 1
   val io = new Bundle() {
-    // 1 for the sign bit
-    val inputWidth = expWidth + precision + 1
     val a, b = in port UInt(inputWidth bits)
-    val rm = in port UInt(3 bits)
+    val rm = in port UInt(3 bits) // round mode
     val result = out port UInt(inputWidth bits)
     val fflags = out port UInt(5 bits)
   }
