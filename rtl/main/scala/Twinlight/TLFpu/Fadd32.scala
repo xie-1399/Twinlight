@@ -296,7 +296,7 @@ case class FPU_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
     (
       special_case.payload.inf_sign ##
         ~U(0, expWidth bits) ##
-        U(0, outPc - 1 bits)
+        U(0, outPc bits)
       ).asUInt
   )
   val special_path_iv = special_case.payload.iv
