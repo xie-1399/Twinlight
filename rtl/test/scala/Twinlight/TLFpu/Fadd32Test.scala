@@ -87,7 +87,7 @@ class Fadd32Test extends AnyFunSuite {
 //              val (a, fa) = (BigInt(1950759170L).mod(1L << 32), tool.Int2FP(BigInt(1950759170L).toInt))
               dut.io.a #= a
               dut.io.b #= b
-              dut.io.rm #= 0
+              dut.io.rm #= RoundingEncoding.RNE
               dut.clockDomain.waitSampling(1)
               // check
               val res = dut.io.result.toInt

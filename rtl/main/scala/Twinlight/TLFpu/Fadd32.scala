@@ -13,7 +13,7 @@ case class FPU_IF(expWidth: Int, precision: Int) extends Bundle with IMasterSlav
   val inputWidth = expWidth + precision + 1
 
   val a, b = UInt(inputWidth bits)
-  val rm = UInt(3 bits) // round mode
+  val rm = RoundingEncoding() // round mode
   val result = UInt(inputWidth bits)
   val fflags = UInt(5 bits)
 
@@ -32,7 +32,7 @@ case class FPU_ADD_Special_Info() extends Bundle {
 case class FPU_ADD_s1_to_s2(expWidth: Int, precision: Int, outPc: Int)
   extends Bundle with IMasterSlave {
   val manWidthWithHiddenOne = precision + 1
-  val rm = UInt(3 bits)
+  val rm = RoundingEncoding()
   val far_path_out = RawFloat(expWidth, outPc + 3)
   val near_path_out = RawFloat(expWidth, outPc + 3)
   val special_case = Flow(FPU_ADD_Special_Info())
@@ -95,7 +95,7 @@ case class FPU_ADD_Near_Path(expWidth: Int, precision: Int, outPC: Int) extends 
   val io = new Bundle {
     val a, b = in port RawFloat(expWidth, manWidthWithHiddenOne) // same reason as the FarPath module
     val need_shift_b = in port Bool()
-    val rm = in port UInt(3 bits)
+    val rm = in port RoundingEncoding()
 
     val result = out port RawFloat(expWidth, outPC + 3)
     val sig_is_zero = out port Bool()
@@ -172,7 +172,7 @@ case class FPU_ADD_s1(expWidth: Int, precision: Int, outPc: Int)
   val inputWidth = expWidth + manWidthWithHiddenOne
   val io = new Bundle() {
     val a, b = in port UInt(inputWidth bits)
-    val rm = in port UInt(3 bits)
+    val rm = in port RoundingEncoding()
     val outx = master(FPU_ADD_s1_to_s2(expWidth, precision, outPc))
   }
 
@@ -404,7 +404,7 @@ case class FPU_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
 
   val near_path_exp_rounded = near_path_rounder.io.cout.asUInt + near_path_exp.asUInt
   val near_path_sig_rounded = near_path_rounder.io.outx
-  val near_path_zero_sign = io.in.rm === RoundModes().RDN
+  val near_path_zero_sign = io.in.rm === RoundingEncoding.RDN
   val near_path_result = Cat(
     (near_path_sign && !near_path_is_zero) || (near_path_zero_sign && near_path_is_zero),
     near_path_exp_rounded,
