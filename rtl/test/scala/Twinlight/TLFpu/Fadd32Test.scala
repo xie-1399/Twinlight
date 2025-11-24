@@ -78,11 +78,13 @@ class Fadd32Test extends AnyFunSuite {
 
         def monitor() = {
           val testThread = fork {
-            val testCase = 1 << 10
+            val testCase = 1 << 20
             val tool = BasicFloatTools()
             val err = Array.tabulate(testCase)({ i =>
               val (a, fa) = tool.genRand()
               val (b, fb) = tool.genRand()
+//              val (b, fb) = (BigInt(4096611387L).mod(1L << 32), tool.Int2FP(BigInt(4096611387L).toInt))
+//              val (a, fa) = (BigInt(1950759170L).mod(1L << 32), tool.Int2FP(BigInt(1950759170L).toInt))
               dut.io.a #= a
               dut.io.b #= b
               dut.io.rm #= 0

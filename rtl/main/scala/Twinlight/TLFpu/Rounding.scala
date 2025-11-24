@@ -65,9 +65,9 @@ object RoundingUnit {
     val in_pad = if (inx.getWidth < width + 2) padd_tail(inx, width + 2) else inx
     val rounder = new RoundingUnit(width)
 
-    rounder.io.inx := in_pad(in_pad.getWidth - 1 downto in_pad.getWidth - width)
-    rounder.io.roundIn := in_pad(in_pad.getWidth - 1 - width downto 0).msb
-    rounder.io.stickyIn := in_pad(in_pad.getWidth - 1 - (width + 1) downto 0).orR
+    rounder.io.inx := in_pad.asBits.resizeLeft(width).asUInt
+    rounder.io.roundIn := in_pad(in_pad.getWidth - (width + 1))
+    rounder.io.stickyIn := in_pad.trim(width + 1).orR
     rounder.io.rm := rm
     rounder.io.signIn := sign
     rounder
@@ -101,7 +101,7 @@ class TininessRounder(expWidth: Int, precision: Int) extends TLModule {
   io.tininess := tininess
 }
 
-object TininessRounder{
+object TininessRounder {
   def apply(expWidth: Int, precision: Int, in: RawFloat, rm: UInt): Bool = {
     val tininess_rounder = new TininessRounder(expWidth, precision)
     tininess_rounder.io.inx := in

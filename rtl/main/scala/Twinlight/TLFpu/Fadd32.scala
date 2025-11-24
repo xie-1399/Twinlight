@@ -49,8 +49,8 @@ case class FPU_ADD_s1_to_s2(expWidth: Int, precision: Int, outPc: Int)
   val near_path_sig_is_zero = Bool()
   val near_path_lza_error = Bool()
   val near_path_int_bit = Bool()
-  val near_path_sig_raw = UInt(precision + 1 bits)
-  val near_path_lzc = UInt(log2Up(precision + 1) bits)
+  val near_path_sig_raw = UInt(manWidthWithHiddenOne + 1 bits)
+  val near_path_lzc = UInt(log2Up(manWidthWithHiddenOne + 1) bits)
   val sel_far_path = Bool()
 
   override def asMaster(): Unit = {
@@ -102,8 +102,8 @@ case class FPU_ADD_Near_Path(expWidth: Int, precision: Int, outPC: Int) extends 
     val a_lt_b = out port Bool()
     val lza_error = out port Bool()
     val int_bit = out port Bool()
-    val sig_raw = out port UInt(manWidthWithHiddenOne bits)
-    val lzc = out port UInt(log2Up(manWidthWithHiddenOne) bits)
+    val sig_raw = out port UInt(manWidthWithHiddenOne + 1 bits)
+    val lzc = out port UInt(log2Up(manWidthWithHiddenOne + 1) bits)
   }
 
   val a_sig = (io.a.mantissa ## B"1'b0").asUInt
@@ -111,36 +111,36 @@ case class FPU_ADD_Near_Path(expWidth: Int, precision: Int, outPC: Int) extends 
   val b_neg = (~b_sig.asBits).asUInt
 
   val a_minus_b = a_sig.expand + (B"1'b1" ## b_neg).asUInt + 1
-  val a_lt_b = a_minus_b.lsb
-  val sig_raw = a_minus_b.resize(outPC + 1)
-  val lza_str = LZA(a_sig, b_neg).resize(manWidthWithHiddenOne)
+  val a_lt_b = a_minus_b.msb
+  val sig_raw = a_minus_b.trim(1)
+  val lza_str = LZA(a_sig.expand, b_neg.expand).asBits.resize(manWidthWithHiddenOne + 1).asUInt
   val lza_str_zero = !lza_str.orR
 
-  val need_shift_lim = io.a.exponent.asUInt < U(precision + 1)
-  val mask_able_k_width = log2Up(precision + 1)
-  val shift_lim_mask_raw = ((B"1'b1" ## B(0, precision + 1 bits)) >> io.a.exponent.resize(mask_able_k_width).asUInt).asUInt.resize(precision + 1)
+  val need_shift_lim = io.a.exponent.asUInt < U(manWidthWithHiddenOne + 1)
+  val mask_able_k_width = log2Up(manWidthWithHiddenOne + 1)
+  val shift_lim_mask_raw = ((B"1'b1" ## B(0, manWidthWithHiddenOne + 1 bits)) >> io.a.exponent.resize(mask_able_k_width).asUInt).asUInt.resize(manWidthWithHiddenOne + 1)
   val shift_lim_mask = Mux(need_shift_lim, shift_lim_mask_raw, U(0).resized)
   val shift_lim_bit = (shift_lim_mask_raw & sig_raw).orR
 
   val lzc_str = shift_lim_mask | lza_str
   val lzc = CLZ(lzc_str)
 
-  val int_bit_mask = Vec.tabulate(precision + 1)({ i =>
-    if (i == precision) {
+  val int_bit_mask = Vec.tabulate(manWidthWithHiddenOne + 1)({ i =>
+    if (i == manWidthWithHiddenOne) {
       lzc_str(i)
     } else {
-      lzc_str(i) & !lzc_str.resize(precision - i).orR
+      lzc_str(i) & !lzc_str.asBits.resizeLeft(manWidthWithHiddenOne - i).orR
     }
   })
 
   val int_bit_predicted = (int_bit_mask.map({ i => i | lza_str_zero }).asBits & sig_raw.asBits).orR
   val int_bit_rshift_1 = ((int_bit_mask.asBits >> U"1'b1").asUInt & sig_raw).orR
 
-  val exceed_lim_mask = Vec.tabulate(precision + 1)({ i =>
-    if (i == precision) {
+  val exceed_lim_mask = Vec.tabulate(manWidthWithHiddenOne + 1)({ i =>
+    if (i == manWidthWithHiddenOne) {
       False
     } else {
-      lza_str.resize(precision - i).orR
+      lza_str.asBits.resizeLeft(manWidthWithHiddenOne - i).orR
     }
   })
 
@@ -380,12 +380,12 @@ case class FPU_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   val exp_s2 = exp_s1 - io.in.near_path_lza_error.asUInt
   near_path_res.exponent := Mux(io.in.near_path_int_bit, exp_s2, U(0)).asBits
 
-  val sig_s1 = (io.in.near_path_sig_raw << lzc)(precision downto 0)
-  val sig_s2 = Mux(io.in.near_path_lza_error, Cat(sig_s1.resize(sig_s1.getWidth - 1), U"1'b0").asUInt, sig_s1)
-  val near_path_sig_cor = if (outPc + 3 > precision + 1) {
+  val sig_s1 = (io.in.near_path_sig_raw << lzc).resize(precision + 2)
+  val sig_s2 = Mux(io.in.near_path_lza_error, (sig_s1.trim(1) ## U"1'b0").asUInt, sig_s1)
+  val near_path_sig_cor = if (outPc + 3 > precision + 2) {
     Cat(
       sig_s2,
-      U(0, outPc + 3 - precision - 1 bits)
+      U(0, outPc + 3 - precision - 2 bits)
     ).asUInt
   } else {
     sig_s2
@@ -396,7 +396,7 @@ case class FPU_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   val near_path_tininess = TininessRounder(expWidth, outPc, near_path_res, io.in.rm)
 
   val near_path_rounder = RoundingUnit(
-    near_path_sig.resize(near_path_sig.getWidth - 1).asUInt,
+    near_path_sig.asUInt.trim(1), // remove the hidden one
     io.in.rm,
     near_path_res.sign,
     outPc
