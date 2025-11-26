@@ -83,7 +83,7 @@ case class BasicFloatTools() {
   }
 }
 
-class Fadd32Test extends AnyFunSuite {
+class FPADDTest extends AnyFunSuite {
 
   test("Fadd32 random test") {
     SIMCFG().compile {
