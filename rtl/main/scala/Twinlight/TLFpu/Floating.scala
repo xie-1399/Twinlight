@@ -13,31 +13,6 @@ import scala.language.postfixOps
  * @param mantissaSize Size of the mantissa field with the implicit one not included
  */
 
-object RoundingEncoding extends SpinalEnum{
-  val RNE, RTZ, RDN, RUP, RMM = newElement()
-  defaultEncoding = SpinalEnumEncoding("RoundingEncoding")(
-    RNE -> 0,
-    RTZ -> 1,
-    RDN -> 2,
-    RUP -> 3,
-    RMM -> 4
-  )
-}
-
-case class FPBundle() extends Bundle{
-  val expNotZero = Bool()
-  val expIsZero = Bool()
-  val expIsOnes = Bool()
-  val manNotZero = Bool()
-  val manIsZero = Bool()
-  val isSubnormal = Bool()
-  val isInf = Bool()
-  val isZero = Bool()
-  val isNaN = Bool()
-  val isSNaN = Bool()
-  val isQNaN = Bool()
-}
-
 case class Floating(exponentSize: Int,
                     mantissaSize: Int) extends Bundle {
 
@@ -158,80 +133,52 @@ object Floating {
     fromUInt(defaultNaNUInt(expWidth, manWidth), expWidth, manWidth)
   }
 }
-
-// it must be a case class, or the cloneOf method cannot retrieve the construction param of such a Bundle
-case class RawFloat(exponentSize: Int,
-               mantissaSize: Int) extends Bundle {
-  // here, the mantissa field CONTAINS the implicit first bit
-  // hence the width of a RawFloat is 33 bits, not 32 bits
-  val sign = Bool()
-  val exponent = Bits(exponentSize bits)
-  val mantissa = Bits(mantissaSize bits)
-}
-
-/* let the floating to the RawFloat*/
-object RawFloat {
-  def fromFP(fp: Floating, expNotZero: Option[Bool] = None): RawFloat = {
-    val inner = RawFloat(fp.exponentSize, fp.mantissaSize + 1)
-    val nz = if (expNotZero.isDefined) expNotZero.get else fp.exponent.orR
-    inner.sign := fp.sign
-    inner.exponent := Mux(nz, fp.exponent, B(1, fp.exponentSize bits))
-    inner.mantissa := nz ## fp.mantissa
-    inner
-  }
-
-  def fromUInt(x: UInt, expWidth: Int, manWidth: Int): RawFloat = {
-    val fp = Floating.fromUInt(x, expWidth, manWidth)
-    val raw = fromFP(fp)
-    raw
-  }
-}
-
-/** Half precision IEEE 754 */
-
-/* FP4 */
-object Floating4_E2M1{
-  def apply() = Floating(2, 1)
-}
-
-object Floating4_E3M0{
-  def apply() = Floating(3, 0)
-}
-
-/* FP6 */
-object Floating6_E3M2{
-  def apply() = Floating(3, 2)
-}
-
-object Floating6_E2M3{
-  def apply() = Floating(2, 3)
-}
-
-/* FP8 */
-object Floating8_E4M3{
-  def apply() = Floating(4, 3)
-}
-
-object Floating8_E5M2{
-  def apply() = Floating(5, 2)
-}
-
-/* FP16 */
-object Floating16 {
-  def apply() = Floating(5, 10)
-}
-
-/** Single precision IEEE 754 */
-object Floating32 {
-  def apply() = Floating(8, 23)
-}
-
-/** Double precision IEEE 754 */
-object Floating64 {
-  def apply() = Floating(11, 52)
-}
-
-/** Quad precision IEEE 754 */
-object Floating128 {
-  def apply() = Floating(15, 112)
-}
+//
+///** Half precision IEEE 754 */
+//
+///* FP4 */
+//object Floating4_E2M1{
+//  def apply() = Floating(2, 1)
+//}
+//
+//object Floating4_E3M0{
+//  def apply() = Floating(3, 0)
+//}
+//
+///* FP6 */
+//object Floating6_E3M2{
+//  def apply() = Floating(3, 2)
+//}
+//
+//object Floating6_E2M3{
+//  def apply() = Floating(2, 3)
+//}
+//
+///* FP8 */
+//object Floating8_E4M3{
+//  def apply() = Floating(4, 3)
+//}
+//
+//object Floating8_E5M2{
+//  def apply() = Floating(5, 2)
+//}
+//
+///* FP16 */
+//object Floating16 {
+//  def apply() = Floating(5, 10)
+//}
+//
+///** Single precision IEEE 754 */
+//object Floating32 {
+//  def apply() = Floating(8, 23)
+//}
+//
+///** Double precision IEEE 754 */
+//object Floating64 {
+//  def apply() = Floating(11, 52)
+//}
+//
+///** Quad precision IEEE 754 */
+//object Floating128 {
+//  def apply() = Floating(15, 112)
+//}

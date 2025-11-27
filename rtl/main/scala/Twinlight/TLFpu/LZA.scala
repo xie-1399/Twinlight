@@ -6,7 +6,7 @@ import spinal.lib._
 
 import scala.language.postfixOps
 
-class LZA(len: Int) extends TLModule {
+case class LZA(len: Int) extends TLModule {
   // One must ensure that the MSB of both io.a and io.b is zero.
   val io = new Bundle {
     val a = in port UInt(len bits)
@@ -14,8 +14,8 @@ class LZA(len: Int) extends TLModule {
     val f = out port UInt(len bits)
   }
 
-  val p = (io.a ^ io.b).asBools
-  val k = (~io.a & ~io.b).asBools // also annihilate
+  val p = (io.a ^ io.b)
+  val k = (~io.a & ~io.b) // also annihilate
 
   io.f := Vec.tabulate(len)({ i =>
     if (i == 0) {
@@ -29,7 +29,7 @@ class LZA(len: Int) extends TLModule {
 object LZA {
   def apply(a: UInt, b: UInt): UInt = {
     assert(a.getWidth == b.getWidth, "The widths of LZA inputs are not equal to each other.")
-    val lza = new LZA(a.getWidth)
+    val lza = LZA(a.getWidth)
     lza.io.a := a
     lza.io.b := b
     lza.io.f

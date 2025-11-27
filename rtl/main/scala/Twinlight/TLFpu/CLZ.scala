@@ -6,7 +6,7 @@ import spinal.lib._
 
 import scala.language.postfixOps
 
-class CLZ(len: Int) extends TLModule{
+case class CLZ(len: Int) extends TLModule{
   val inWidth = len
   val outWidth = U(inWidth - 1).getWidth
 
@@ -20,7 +20,7 @@ class CLZ(len: Int) extends TLModule{
 
 object CLZ {
   def apply(value: UInt): UInt = {
-    val clz = new CLZ(value.getWidth)
+    val clz = CLZ(value.getWidth)
     clz.io.clz_in := value
     clz.io.clz_out
   }
