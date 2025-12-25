@@ -12,6 +12,8 @@ case class BasicFloatTools() {
   val IEEE_FP32 = false
   val IEEE_FP16 = true
 
+  val gen = new Random()
+
   // subnormal: s 00000000 f
   // inf      : s 11111111 ==0
   // NaN      : s 11111111 !=0
@@ -37,7 +39,6 @@ case class BasicFloatTools() {
   }
 
   def genRand(): (BigInt, Float) = {
-    val gen = new Random()
     val randi = gen.nextInt(100)
 
     val rand_percent = 70
