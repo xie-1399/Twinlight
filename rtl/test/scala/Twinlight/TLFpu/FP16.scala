@@ -60,23 +60,67 @@ class FP16 {
   }
 
   def f32to16(sign: Int, exp: Int, sig: Int): (Int, Int, Int) = {
-    val g = ((sig >> 12) & 0x01) == 1
-    val r = ((sig >> 11) & 0x01) == 1
-    val s = (sig & 0x7ff) == 1
+    val sig_i = sig | (1 << 23)
+    // 1.xxx_xxxx_xxx|x_xxxx_xxxx_xxxx
+    //              g r s------------
+    val g = ((sig_i >> 13) & 0x01) == 1
+    val r = ((sig_i >> 12) & 0x01) == 1
+    val s = (sig_i & ((1 << 12) - 1)) != 0
 
     val exp1 = exp - 127 + 15
-    val sig1 = ((sig >> 13) & 0x3ff) + (if ((r && s) || (r && !s && g)) 1 else 0)
+
+    val sig_raw = (sig_i >> 13) & 0x3ff
+    val sig1_rup = if ((r && s) || (r && !s && g)) 1 else 0
+    //    println(sig_raw, sig1_rup)
+
+    val sig1 = sig_raw + sig1_rup
 
     //    println(sign, exp, sig)
-    //    println(sign, exp1, sig1)
+    //        println(sign, exp1, sig1)
+
+    // 0.1xxx_xxxx_xx|xx_xxxx_xxxx_xxxx
+    //              g rs------------
+    val sigsub = sig_i >> 14
+    val gx = ((sig_i >> 14) & 0x01) == 1
+    val rx = ((sig_i >> 13) & 0x01) == 1
+    val sx = (sig_i & ((1 << 13) - 1)) != 0
 
     val sig2 = if (exp1 == 0) {
-      sig1 >> 1 | (1 << 9)
+      // subnormal, recover the hidden one
+      val rx_up = if ((rx && sx) || (rx && !sx && gx)) 1 else 0
+      sigsub + rx_up
     } else if (exp1 < 0) {
-      (sig1 >> 1 | (1 << 9)) >> exp1.abs
+      val shamt = exp1.abs + 14
+
+      shamt match {
+        case x if x < 23 =>
+          // 0.0...01xxx_xxx|x_xxxx_xxxx_xxxx_xxxx
+          //  exp1.abs     g rs------------
+          val gg = ((sig_i >> shamt) & 0x01) == 1
+          val rr = ((sig_i >> (shamt - 1)) & 0x01) == 1
+          val ss = ((sig_i & ((1 << (shamt - 1)) - 1)) != 0)
+          //      println(s"=== g, r, s = $gg, $rr, $ss")
+          (sig_i >> shamt) + (if ((rr && ss) || (rr && !ss && gg)) 1 else 0)
+        case x if x == 23 =>
+          // 0.0000000001|xxx_xxxx_xxxx_xxxx_xxxx_xxxx
+          //            g rs------------
+          val gg = true
+          val rr = ((sig_i >> (shamt - 1)) & 0x01) == 1
+          val ss = ((sig_i & ((1 << (shamt - 1)) - 1)) != 0)
+          //      println(s"=== g, r, s = $gg, $rr, $ss")
+          1 + (if ((rr && ss) || (rr && !ss && gg)) 1 else 0)
+        case x if x > 23 =>
+          // 0.0000000000|0001xxx_xxxx_xxxx_xxxx_xxxx_xxxx
+          //            g rs------------
+          val rr = if (shamt == 24) true else false
+          val ss = if (shamt == 24) (sig_i & ((1 << (23 - 1)) - 1)) != 0 else true
+          //      println(s"=== g, r, s = $gg, $rr, $ss")
+          0 + (if (rr && ss) 1 else 0)
+      }
     } else {
       sig1
     }
+
 
     val exp_tmp = if (exp == 0) 0 else if (exp == 0xff) 0x1f else if (exp1 > 30) 30 else if (exp1 == 0) 0 else if (exp1 < 0) 0 else exp1
     val sig_tmp = if (exp == 0) sig1 else if (exp == 0xff) sig1 else if (exp1 > 30) 0x3ff else if (exp1 <= 0) sig2 else sig1
