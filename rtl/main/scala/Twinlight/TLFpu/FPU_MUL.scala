@@ -277,7 +277,7 @@ case class FMUL_s3(expWidth: Int, precision: Int) extends TLModule {
   io.to_fadd.inter_flags.overflow := exp_pre_round.asUInt > (U"1'b1" #* expWidth).asUInt
 }
 
-case class FMUL(expWidth: Int, precision: Int) extends TLModule {
+case class FMUL(expWidth: Int, precision: Int, is_traditional: Boolean = false) extends TLModule {
   val manWidthWithHiddenOne = precision + 1
   val fullWidth = expWidth + precision + 1
   val io = new Bundle() {
@@ -288,7 +288,6 @@ case class FMUL(expWidth: Int, precision: Int) extends TLModule {
     val to_fadd = master(FMULToFADD(expWidth, precision))
   }
 
-  val multiplier = Multiplier(precision + 1 + 1, pipeAt = Seq())
   val fmul_s1 = FMUL_s1(expWidth, precision)
   val fmul_s2 = FMUL_s2(expWidth, precision)
   val fmul_s3 = FMUL_s3(expWidth, precision)
@@ -297,18 +296,24 @@ case class FMUL(expWidth: Int, precision: Int) extends TLModule {
   val raw_a = RawFloat.fromUInt(io.a, expWidth, precision)
   val raw_b = RawFloat.fromUInt(io.b, expWidth, precision)
 
-  // sign | hidden bit | precision
-  multiplier.io.a := raw_a.mantissa.asUInt.expand // multiplier requires a sign bit.
-  multiplier.io.b := raw_b.mantissa.asUInt.expand
-  multiplier.io.regEnables.foreach(_ := True)
-
   fmul_s1.io.a := io.a
   fmul_s1.io.b := io.b
   fmul_s1.io.rm := io.rm
 
   // 011 * 011 = extra sign | sign | 1001
+  if (!is_traditional){
+    // sign | hidden bit | precision
+    val multiplier = Multiplier(precision + 1 + 1, pipeAt = Seq())
+    multiplier.io.a := raw_a.mantissa.asUInt.expand // multiplier requires a sign bit.
+    multiplier.io.b := raw_b.mantissa.asUInt.expand
+    multiplier.io.regEnables.foreach(_ := True)
+
+    fmul_s2.io.prod := multiplier.io.result.trim(2)
+  }else{
+    fmul_s2.io.prod := (raw_a.mantissa.asUInt.expand * raw_b.mantissa.asUInt.expand).trim(2)
+  }
   fmul_s2.io.inx := fmul_s1.io.out
-  fmul_s2.io.prod := multiplier.io.result.trim(2)
+
 
   fmul_s3.io.inx := fmul_s2.io.out
 
