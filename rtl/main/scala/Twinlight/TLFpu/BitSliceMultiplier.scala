@@ -16,9 +16,22 @@ case class BitSliceMultiplier(multiplicandWidth: Int, multiplierWidth: Int, slic
   }
 
   val multiplicand_slices = BitSliceUnit(multiplicandWidth, sliceWidth, io.multiplicand.resize(multiplicandWidth + sliceWidth bits).asBits)
+  val columns: Array[Seq[Bool]] = Array.fill(multiplicandWidth + multiplierWidth)(Seq())
+
   val partial_products = Vec.tabulate(multiplicandWidth / sliceWidth + 1) { i =>
-    ((multiplicand_slices(i) * io.multiplier) << (2 * i)).resize(multiplicandWidth + multiplierWidth bits)
+    val pp_temp = multiplicand_slices(i) * io.multiplier
+    val s = pp_temp.msb
+    val pp = if (i == 0) Cat(~s, s, s, pp_temp) else Cat(U"1", ~s, pp_temp)
+    for (j <- 2 * i until 2 * i + pp.getWidth) {
+      if (j < columns.length){
+        columns(j) = columns(j) :+ pp(j - 2 * i)
+      }
+    }
+    (pp_temp << (2 * i)).resize(multiplicandWidth + multiplierWidth bits)
   }
 
-  io.product := partial_products.reduceBalancedTree(_ + _)
+  val (sum, carry) = Multiplier(multiplicandWidth, Seq()).addAll(cols = columns, depth = 0)
+
+  //  io.product := partial_products.reduceBalancedTree(_ + _)
+  io.product := (sum + carry).asSInt
 }
