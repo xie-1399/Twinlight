@@ -8,12 +8,12 @@ import scala.language.postfixOps
 
 class FPMULTest extends AnyFunSuite {
 
-  test("FPMUL random test") {
+  test("FPMULTraditional random test") {
     SIMCFG().compile {
       val dut = if (BasicFloatTools().IEEE_FP32) {
-        FMUL(expWidth = 8, precision = 23)
+        FMUL(expWidth = 8, precision = 23, is_wallace = true, is_bitslice = true)
       } else {
-        FMUL(expWidth = 5, precision = 10)
+        FMUL(expWidth = 5, precision = 10, is_wallace = true, is_bitslice = true)
       }
       dut
     }.doSimUntilVoid {
@@ -27,15 +27,14 @@ class FPMULTest extends AnyFunSuite {
             val epsilon = 1.0 * 1e-2
             val tool = BasicFloatTools()
             val err = Array.tabulate(testCase)({ i =>
-                                          val (a, fa) = tool.genRand()
-                                          val (b, fb) = tool.genRand()
-//              val sa = "547"
-//              val sb = "8023"
-//              val base = 16
-//
-//              val (a, fa) = (BigInt(sa, base).mod(1L << 16), new FP16().int16tofloat(BigInt(sa, base).toInt))
-//              val (b, fb) = (BigInt(sb, base).mod(1L << 16), new FP16().int16tofloat(BigInt(sb, base).toInt))
-
+              val (a, fa) = tool.genRand()
+              val (b, fb) = tool.genRand()
+              //              val sa = "547"
+              //              val sb = "8023"
+              //              val base = 16
+              //
+              //              val (a, fa) = (BigInt(sa, base).mod(1L << 16), new FP16().int16tofloat(BigInt(sa, base).toInt))
+              //              val (b, fb) = (BigInt(sb, base).mod(1L << 16), new FP16().int16tofloat(BigInt(sb, base).toInt))
               dut.io.a #= a
               dut.io.b #= b
               dut.io.rm #= RoundingEncoding.RNE

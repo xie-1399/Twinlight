@@ -277,7 +277,7 @@ case class FMUL_s3(expWidth: Int, precision: Int) extends TLModule {
   io.to_fadd.inter_flags.overflow := exp_pre_round.asUInt > (U"1'b1" #* expWidth).asUInt
 }
 
-case class FMUL(expWidth: Int, precision: Int, is_traditional: Boolean = false) extends TLModule {
+case class FMUL(expWidth: Int, precision: Int, is_wallace: Boolean = true, is_bitslice: Boolean = true) extends TLModule {
   val manWidthWithHiddenOne = precision + 1
   val fullWidth = expWidth + precision + 1
   val io = new Bundle() {
@@ -300,8 +300,14 @@ case class FMUL(expWidth: Int, precision: Int, is_traditional: Boolean = false) 
   fmul_s1.io.b := io.b
   fmul_s1.io.rm := io.rm
 
-  // 011 * 011 = extra sign | sign | 1001
-  if (!is_traditional){
+  if (is_bitslice) {
+    val multiplier = BitSliceMultiplier(12, 12, 2, wallaceTree = is_wallace)
+    multiplier.io.multiplier := raw_a.mantissa.asUInt.expand.asSInt
+    multiplier.io.multiplicand := raw_b.mantissa.asUInt.expand.asSInt
+
+    fmul_s2.io.prod := multiplier.io.product.trim(2).asUInt
+  } else if (is_wallace) {
+    // 011 * 011 = extra sign | sign | 1001
     // sign | hidden bit | precision
     val multiplier = Multiplier(precision + 1 + 1, pipeAt = Seq())
     multiplier.io.a := raw_a.mantissa.asUInt.expand // multiplier requires a sign bit.
@@ -309,9 +315,11 @@ case class FMUL(expWidth: Int, precision: Int, is_traditional: Boolean = false) 
     multiplier.io.regEnables.foreach(_ := True)
 
     fmul_s2.io.prod := multiplier.io.result.trim(2)
-  }else{
+
+  } else {
     fmul_s2.io.prod := (raw_a.mantissa.asUInt.expand * raw_b.mantissa.asUInt.expand).trim(2)
   }
+
   fmul_s2.io.inx := fmul_s1.io.out
 
 

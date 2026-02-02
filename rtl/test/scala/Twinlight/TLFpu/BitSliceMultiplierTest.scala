@@ -13,7 +13,7 @@ class BitSliceMultiplierTest extends AnyFunSuite {
 
   test(" BitSliceMultiplierTest random test") {
     SIMCFG().compile {
-      val dut = BitSliceMultiplier(multiplicandWidth = 8, multiplierWidth = 8, sliceWidth = 2)
+      val dut = BitSliceMultiplier(multiplicandWidth = 8, multiplierWidth = 8, sliceWidth = 2, wallaceTree = false)
       dut.multiplicand_slices.simPublic()
       dut.partial_products.simPublic()
       dut
