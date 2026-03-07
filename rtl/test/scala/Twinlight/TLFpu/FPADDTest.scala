@@ -8,9 +8,9 @@ import spinal.core.sim._
 import scala.language.postfixOps
 import scala.util.Random
 
-case class BasicFloatTools() {
-  val IEEE_FP32 = false
-  val IEEE_FP16 = true
+case class BasicFloatTools(fp32: Boolean = true, fp16: Boolean = false) {
+  val IEEE_FP32 = fp32
+  val IEEE_FP16 = fp16
 
   val gen = new Random()
 
