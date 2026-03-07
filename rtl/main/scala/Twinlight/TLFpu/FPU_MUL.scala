@@ -301,7 +301,7 @@ case class FMUL(expWidth: Int, precision: Int, is_wallace: Boolean = true, is_bi
   fmul_s1.io.rm := io.rm
 
   if (is_bitslice) {
-    val multiplier = BitSliceMultiplier(12, 12, 2, wallaceTree = is_wallace)
+    val multiplier = BitSliceMultiplier(manWidthWithHiddenOne + 1, manWidthWithHiddenOne + 1, 2, wallaceTree = is_wallace)
     multiplier.io.multiplier := raw_a.mantissa.asUInt.expand.asSInt
     multiplier.io.multiplicand := raw_b.mantissa.asUInt.expand.asSInt
 
