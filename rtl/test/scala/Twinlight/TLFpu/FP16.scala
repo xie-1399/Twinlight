@@ -122,10 +122,11 @@ class FP16 {
     }
 
 
-    val exp_tmp = if (exp == 0) 0 else if (exp == 0xff) 0x1f else if (exp1 > 30) 30 else if (exp1 == 0) 0 else if (exp1 < 0) 0 else exp1
-    val sig_tmp = if (exp == 0) sig1 else if (exp == 0xff) sig1 else if (exp1 > 30) 0x3ff else if (exp1 <= 0) sig2 else sig1
+    val exp_tmp = if (exp == 0) 0 else if (exp == 0xff) 0x1f else if (exp1 >= 31) 31 else if (exp1 == 0) 0 else if (exp1 < 0) 0 else exp1
+    val sig_tmp = if (exp == 0) sig1 else if (exp == 0xff) sig1 else if (exp1 >= 31) 0x000 /* infinity, not 0x3ff*/ else if (exp1 <= 0) sig2 else sig1
     val expf = if (((sig_tmp >> 10) & 0x1) == 1) exp_tmp + 1 else exp_tmp
     val sigf = sig_tmp & 0x3ff
+//    println(s"$exp_tmp, $sig_tmp, $expf, $sigf, $exp, $exp1")
     (sign, expf, sigf)
   }
 

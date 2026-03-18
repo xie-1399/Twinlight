@@ -255,8 +255,8 @@ case class FMUL_s3(expWidth: Int, precision: Int) extends TLModule {
       Cat(
         raw_in.sign,
         U((BigInt(1) << expWidth) - 1, expWidth bits),
-        U(0, precision - 1 bits)).asUInt, // inf
-      Cat(raw_in.sign, U(0, expWidth + precision - 1 bits)).asUInt // zero
+        U(0, precision bits)).asUInt, // inf
+      Cat(raw_in.sign, U(0, expWidth + precision bits)).asUInt // zero
     )
   )
   val special_fflags = Cat(special_case.payload.inv, False, False, False, False)

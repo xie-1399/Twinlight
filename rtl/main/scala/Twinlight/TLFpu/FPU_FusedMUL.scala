@@ -6,33 +6,6 @@ import spinal.lib._
 
 import scala.language.postfixOps
 
-//case class FMUL_s1_to_s2(expWidth: Int, precision: Int) extends Bundle with IMasterSlave {
-//  val special_case = Flow(FMUL_special_info())
-//  val early_overflow = Bool()
-//  val prod_sign = Bool()
-//  val shift_amt = UInt(expWidth + 1 bits)
-//  val exp_shifted = UInt(expWidth + 1 bits)
-//  val may_be_subnormal = Bool()
-//  val rm = RoundingEncoding()
-//
-//  override def asMaster(): Unit = {
-//    out(early_overflow, prod_sign, shift_amt, exp_shifted, may_be_subnormal, rm, special_case)
-//  }
-//}
-//
-//case class FMUL_s2_to_s3(expWidth: Int, precision: Int) extends Bundle with IMasterSlave {
-//  val paddingBits = precision + 3
-//  val special_case = Flow(FMUL_special_info())
-//  val raw_out = RawFloat(expWidth + 1, paddingBits + 2 * precision + 2)
-//  val early_overflow = Bool()
-//  val rm = RoundingEncoding()
-//
-//  override def asMaster(): Unit = {
-//    out(special_case, raw_out, early_overflow, rm)
-//  }
-//}
-//
-
 case class Lb_ceil(intWidth: Int) extends TLModule {
   val depth = log2Up(intWidth)
   val io = new Bundle() {
@@ -218,98 +191,8 @@ case class FMULFused_s2(expWidth: Int, precision: Int) extends TLModule {
   io.out.raw_out.mantissa := sig_shifted
 
 }
-//
-//case class FMULFused_s3(expWidth: Int, precision: Int) extends TLModule {
-//  val fullWidth = expWidth + precision + 1
-//  val io = new Bundle() {
-//    val inx = slave(FMUL_s2_to_s3(expWidth, precision))
-//    val result = out port UInt(fullWidth bits)
-//    val fflags = out port UInt(5 bits)
-//    val to_fadd = master(FMULToFADD(expWidth, precision))
-//  }
-//
-//  val rm = io.inx.rm
-//  val prod_sign = io.inx.raw_out.sign
-//
-//  val exp_pre_round = io.inx.raw_out.exponent
-//  val sig_shifted = io.inx.raw_out.mantissa
-//
-//  val raw_in = RawFloat(expWidth, precision + 3)
-//  raw_in.sign := prod_sign
-//  raw_in.exponent := exp_pre_round.resized
-//  raw_in.mantissa := sig_shifted.asBits.resizeLeft(precision + 2) ## sig_shifted.asUInt.trim(precision + 2).orR
-//
-//  val tininess = TininessRounder(expWidth, precision, raw_in, rm)
-//
-//  val rounder = RoundingUnit(
-//    raw_in.mantissa.asUInt.trim(1), // hidden bit is not needed
-//    rm,
-//    raw_in.sign,
-//    precision
-//  )
-//
-//  val exp_rounded = rounder.io.cout.asUInt + raw_in.exponent.asUInt
-//  val sig_rounded = rounder.io.outx
-//
-//  val common_of = Mux(
-//    rounder.io.cout,
-//    raw_in.exponent === B((BigInt(1) << expWidth) - 2, expWidth bits),
-//    raw_in.exponent === B((BigInt(1) << expWidth) - 1, expWidth bits)
-//  ) || io.inx.early_overflow
-//  val common_ix = rounder.io.inexact | common_of
-//  val common_uf = tininess & common_ix
-//
-//  val rmin = RoundingUnit.is_rmin(rm, raw_in.sign)
-//
-//  val of_exp = Mux(rmin,
-//    U((BigInt(1) << expWidth) - 2, expWidth bits),
-//    U((BigInt(1) << expWidth) - 1, expWidth bits)
-//  )
-//  val common_exp = Mux(
-//    common_of,
-//    of_exp,
-//    exp_rounded(expWidth - 1 downto 0)
-//  )
-//  val common_sig = Mux(
-//    common_of,
-//    Mux(rmin, (U"1'b1" #* precision).asUInt, U(0).resized),
-//    sig_rounded
-//  )
-//  val common_result =
-//    Cat(raw_in.sign, common_exp, common_sig)
-//
-//  val common_fflags = Cat(False, False, common_of, common_uf, common_ix)
-//
-//  val special_case = io.inx.special_case
-//  val special_result = Mux(special_case.payload.nan,
-//    Floating.defaultNaNUInt(expWidth, precision), // default NaN
-//    Mux(special_case.payload.inf,
-//      Cat(
-//        raw_in.sign,
-//        U((BigInt(1) << expWidth) - 1, expWidth bits),
-//        U(0, precision - 1 bits)).asUInt, // inf
-//      Cat(raw_in.sign, U(0, expWidth + precision - 1 bits)).asUInt // zero
-//    )
-//  )
-//  val special_fflags = Cat(special_case.payload.inv, False, False, False, False)
-//
-//  io.result := Mux(special_case.valid, special_result, common_result.asUInt)
-//  io.fflags := Mux(special_case.valid, special_fflags.asUInt, common_fflags.asUInt)
-//
-//  io.to_fadd.rm := io.inx.rm
-//  io.to_fadd.fp_prod.sign := prod_sign
-//  io.to_fadd.fp_prod.exponent := Mux(special_case.payload.hasZero, B(0), exp_pre_round.resize(expWidth bits))
-//  io.to_fadd.fp_prod.mantissa := Mux(special_case.payload.hasZero,
-//    B(0),
-//    sig_shifted.asUInt.trim(1).asBits.resizeLeft(2 * precision + 1) | (sig_shifted.asUInt.trim(2 * precision).orR #* (2 * precision + 1))
-//  )
-//  io.to_fadd.inter_flags.isInv := special_case.payload.inv
-//  io.to_fadd.inter_flags.isInf := special_case.payload.inf && !special_case.payload.nan
-//  io.to_fadd.inter_flags.isNaN := special_case.payload.nan
-//  io.to_fadd.inter_flags.overflow := exp_pre_round.asUInt > (U"1'b1" #* expWidth).asUInt
-//}
 
-case class FMULFused(expWidth: Int, precision: Int, intWidth: Int, is_wallace: Boolean = true, is_bitslice: Boolean = true) extends TLModule {
+case class FMULFused(expWidth: Int, precision: Int, intWidth: Int, is_wallace: Boolean = false, is_bitslice: Boolean = false) extends TLModule {
   val manWidthWithHiddenOne = precision + 1
   val fullWidth = expWidth + precision + 1
   val io = new Bundle() {

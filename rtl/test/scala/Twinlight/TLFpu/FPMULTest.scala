@@ -57,8 +57,8 @@ class FPMULTest extends AnyFunSuite {
                 val rerr_tmp = (if (BasicFloatTools().IEEE_FP32) (tool.Int2FP(res) - tool.Int2FP(std_res)) / tool.Int2FP(std_res) else (new FP16().int16tofloat(res) - new FP16().int16tofloat(std_res)) / new FP16().int16tofloat(std_res)).abs
                 val rerr = if (rerr_tmp.isNaN || rerr_tmp.isInfinity) 0.0f else rerr_tmp
                 val iseq = (res == std_res) || (tool.isNan(res) && tool.isNan(std_res))
-                val s_failed = !iseq && rerr > epsilon
-                if (!iseq && rerr > epsilon) {
+                val s_failed = !iseq
+                if (!iseq) {
                   println(s"a * b = $fa * $fb = 0x${a.toInt.toHexString} * 0x${b.toInt.toHexString} = $std_res_f = 0x${std_res.toHexString}")
                   println(s"res     ${"".padTo((fa.toString.length + fb.toString.length + 12 + a.toString().length + b.toString().length), ' ')} = $res_f = 0x${res.toHexString}")
                   println(" ")

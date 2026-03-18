@@ -7,17 +7,17 @@ import spinal.core.sim._
 import scala.language.postfixOps
 
 class FPMULFusedTest extends AnyFunSuite {
-
+  val tool = BasicFloatTools(fp32 = false, fp16 = true)
   val testConfigs = Array(
     (true, true),
     (true, false),
     (false, true),
     (false, false),
   )
-  testConfigs.foreach{ testConfig =>
+  testConfigs.foreach { testConfig =>
     test(s"FPMULFusedTest(is_wallace = ${testConfig._1}, is_bitslice = ${testConfig._2}) random test") {
       SIMCFG().compile {
-        val dut = if (BasicFloatTools().IEEE_FP32) {
+        val dut = if (tool.IEEE_FP32) {
           FMULFused(expWidth = 8, precision = 23, intWidth = 8, is_wallace = testConfig._1, is_bitslice = testConfig._2)
         } else {
           FMULFused(expWidth = 5, precision = 10, intWidth = 8, is_wallace = testConfig._1, is_bitslice = testConfig._2)
@@ -32,7 +32,6 @@ class FPMULFusedTest extends AnyFunSuite {
             val testThread = fork {
               val testCase = 1 << 20
               val epsilon = 1.0 * 1e-2
-              val tool = BasicFloatTools()
               val err = Array.tabulate(testCase)({ i =>
                 val (a, fa) = tool.genRand()
                 //              val (b, fb) = tool.genRand()
@@ -51,18 +50,21 @@ class FPMULFusedTest extends AnyFunSuite {
 
                 // check
                 val res = dut.io.result.toInt
-                val std_res = if (BasicFloatTools().IEEE_FP32) tool.FP2Int(fa * fb) else new FP16().float2int16(fa * fb)
+                val std_res = if (tool.IEEE_FP32) tool.FP2Int(fa * fb) else new FP16().float2int16(fa * fb)
 
                 //              println(s"fa + fb = ${fa + fb}")
 
-                val res_f = if (BasicFloatTools().IEEE_FP32) tool.Int2FP(res) else new FP16().int16tofloat(res)
-                val std_res_f = if (BasicFloatTools().IEEE_FP32) tool.Int2FP(std_res) else new FP16().int16tofloat(std_res)
+                val res_f = if (tool.IEEE_FP32) tool.Int2FP(res) else new FP16().int16tofloat(res)
 
-                val rerr_tmp = (if (BasicFloatTools().IEEE_FP32) (tool.Int2FP(res) - tool.Int2FP(std_res)) / tool.Int2FP(std_res) else (new FP16().int16tofloat(res) - new FP16().int16tofloat(std_res)) / new FP16().int16tofloat(std_res)).abs
+//                println(fa * fb, std_res)
+
+                val std_res_f = if (tool.IEEE_FP32) tool.Int2FP(std_res) else new FP16().int16tofloat(std_res)
+
+                val rerr_tmp = (if (tool.IEEE_FP32) (tool.Int2FP(res) - tool.Int2FP(std_res)) / tool.Int2FP(std_res) else (new FP16().int16tofloat(res) - new FP16().int16tofloat(std_res)) / new FP16().int16tofloat(std_res)).abs
                 val rerr = if (rerr_tmp.isNaN || rerr_tmp.isInfinity) 0.0f else rerr_tmp
                 val iseq = (res == std_res) || (tool.isNan(res) && tool.isNan(std_res))
-                val s_failed = !iseq && rerr > epsilon
-                if (!iseq && rerr > epsilon) {
+                val s_failed = !iseq
+                if (!iseq) {
                   println(s"a * b = $fa * $fb = 0x${a.toInt.toHexString} * 0x${b.toInt.toHexString} = $std_res_f = 0x${std_res.toHexString}")
                   println(s"res     ${"".padTo((fa.toString.length + fb.toString.length + 12 + a.toString().length + b.toString().length), ' ')} = $res_f = 0x${res.toHexString}")
                   println(" ")
