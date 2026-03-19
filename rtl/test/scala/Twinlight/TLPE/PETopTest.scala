@@ -9,7 +9,7 @@ import scala.language.postfixOps
 
 class PETopTest extends AnyFunSuite {
 
-  val tool = BasicFloatTools(fp32 = true, fp16 = false)
+  val tool = BasicFloatTools(fp32 = false, fp16 = true)
 
   val testConfigs = Array(
     (true, true),

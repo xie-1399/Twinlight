@@ -9,10 +9,11 @@ import scala.language.postfixOps
 import scala.util.Random
 
 class MultiplierTest extends AnyFunSuite {
+  val tool = BasicFloatTools(fp32 = false, fp16 = true)
 
   test("MultiplierTest random test") {
     SIMCFG().compile {
-      val dut = if (BasicFloatTools().IEEE_FP32) {
+      val dut = if (tool.IEEE_FP32) {
         Multiplier(23 + 1 + 1, Seq())
       } else {
         Multiplier(10 + 1 + 1, Seq())
@@ -28,7 +29,6 @@ class MultiplierTest extends AnyFunSuite {
           val testThread = fork {
             val testCase = 1 << 20
             val epsilon = 1.0 * 1e-2
-            val tool = BasicFloatTools()
             val err = Array.tabulate(testCase)({ i =>
               val a = tool.gen.nextInt(1 << 11)
               val b = tool.gen.nextInt(1 << 11)

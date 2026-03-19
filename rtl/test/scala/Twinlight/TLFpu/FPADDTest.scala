@@ -98,9 +98,11 @@ case class BasicFloatTools(fp32: Boolean = true, fp16: Boolean = false) {
 
 class FPADDTest extends AnyFunSuite {
 
+  val tool = BasicFloatTools(fp32=false, fp16=true)
+
   test("Fadd32 random test") {
     SIMCFG().compile {
-      val dut = if (BasicFloatTools().IEEE_FP32) {
+      val dut = if (tool.IEEE_FP32) {
         FPU_ADD(expWidth = 8, precision = 23)
       } else {
         FPU_ADD(expWidth = 5, precision = 10)
@@ -115,7 +117,6 @@ class FPADDTest extends AnyFunSuite {
           val testThread = fork {
             val testCase = 1 << 20
             val epsilon = 1.0 * 1e-2
-            val tool = BasicFloatTools()
             val err = Array.tabulate(testCase)({ i =>
               val (a, fa) = tool.genRand()
               val (b, fb) = tool.genRand()
@@ -127,14 +128,14 @@ class FPADDTest extends AnyFunSuite {
               dut.clockDomain.waitSampling(1)
               // check
               val res = dut.io.result.toInt
-              val std_res = if (BasicFloatTools().IEEE_FP32) tool.FP2Int(fa + fb) else new FP16().float2int16(fa + fb)
+              val std_res = if (tool.IEEE_FP32) tool.FP2Int(fa + fb) else new FP16().float2int16(fa + fb)
 
               //              println(s"fa + fb = ${fa + fb}")
 
-              val res_f = if (BasicFloatTools().IEEE_FP32) tool.Int2FP(res) else new FP16().int16tofloat(res)
-              val std_res_f = if (BasicFloatTools().IEEE_FP32) tool.Int2FP(std_res) else new FP16().int16tofloat(std_res)
+              val res_f = if (tool.IEEE_FP32) tool.Int2FP(res) else new FP16().int16tofloat(res)
+              val std_res_f = if (tool.IEEE_FP32) tool.Int2FP(std_res) else new FP16().int16tofloat(std_res)
 
-              val rerr_tmp = (if (BasicFloatTools().IEEE_FP32) (tool.Int2FP(res) - tool.Int2FP(std_res)) / tool.Int2FP(std_res) else (new FP16().int16tofloat(res) - new FP16().int16tofloat(std_res)) / new FP16().int16tofloat(std_res)).abs
+              val rerr_tmp = (if (tool.IEEE_FP32) (tool.Int2FP(res) - tool.Int2FP(std_res)) / tool.Int2FP(std_res) else (new FP16().int16tofloat(res) - new FP16().int16tofloat(std_res)) / new FP16().int16tofloat(std_res)).abs
               val rerr = if (rerr_tmp.isNaN || rerr_tmp.isInfinity) 0.0f else rerr_tmp
               val iseq = (res == std_res) || (tool.isNan(res) && tool.isNan(std_res))
               val s_failed = !iseq
