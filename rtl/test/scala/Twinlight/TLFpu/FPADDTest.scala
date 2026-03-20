@@ -33,7 +33,7 @@ case class BasicFloatTools(fp32: Boolean = true, fp16: Boolean = false) {
 
   def isNan(x: Int): Boolean = {
     val xint = x
-    if (IEEE_FP32) {  // 0111-1111-1000-0000-0000-0000-0000-0000
+    if (IEEE_FP32) { // 0111-1111-1000-0000-0000-0000-0000-0000
       val exp = (xint & 0x7F800000) >> 23
       val mantissa = xint & 0x007FFFFF
       exp == 0xFF && mantissa != 0
@@ -44,16 +44,9 @@ case class BasicFloatTools(fp32: Boolean = true, fp16: Boolean = false) {
     }
   }
 
-  def genRand(): (BigInt, Float) = {
-    val randi = gen.nextInt(100)
-
-    val rand_percent = 65
-    val inf_percent = 10
-    val nan_percent = 10
-    val subnormal_percent = 10
-    val zero_percent = 5
-
-    assert(rand_percent + inf_percent + nan_percent + subnormal_percent + zero_percent == 100)
+  def genRand(rand_percent: Int = 65, inf_percent: Int = 10, nan_percent: Int = 10, subnormal_percent: Int = 10, zero_percent: Int = 5): (BigInt, Float) = {
+    val randMax = rand_percent + inf_percent + nan_percent + subnormal_percent + zero_percent
+    val randi = gen.nextInt(randMax)
 
     val rand_threshold = 0 + rand_percent
     val inf_threshold = rand_threshold + inf_percent
@@ -61,7 +54,7 @@ case class BasicFloatTools(fp32: Boolean = true, fp16: Boolean = false) {
     val subnormal_threshold = nan_threshold + subnormal_percent
     val zero_threshold = subnormal_threshold + zero_percent
 
-    assert(zero_threshold == 100)
+    assert(zero_threshold == randMax)
 
     val (xint, xfloat) = if (IEEE_FP32) {
       val xx = (if (randi < rand_threshold) { // normal
@@ -94,11 +87,15 @@ case class BasicFloatTools(fp32: Boolean = true, fp16: Boolean = false) {
     //    println((if (IEEE_FP32) "fp32 = " else "fp16 = ") + xfloat.toString)
     (xint, xfloat)
   }
+
+  def genRandAlmostNormal(): (BigInt, Float) = {
+    genRand(rand_percent = 2000, inf_percent = 1, nan_percent = 1, subnormal_percent = 10, zero_percent = 100)
+  }
 }
 
 class FPADDTest extends AnyFunSuite {
 
-  val tool = BasicFloatTools(fp32=false, fp16=true)
+  val tool = BasicFloatTools(fp32 = false, fp16 = true)
 
   test("Fadd32 random test") {
     SIMCFG().compile {
