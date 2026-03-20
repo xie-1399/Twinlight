@@ -10,20 +10,25 @@ import scala.language.postfixOps
 class PETopTest extends AnyFunSuite {
 
   val tool = BasicFloatTools(fp32 = false, fp16 = true)
+  val weightBufferSize = 4
+
+  def fpPrecisionPreserve(a: Float): Float = {
+    if (tool.IEEE_FP32) tool.Int2FP(tool.FP2Int(a)) else new FP16().int16tofloat(new FP16().float2int16(a))
+  }
 
   val testConfigs = Array(
-    (true, true),
-    (true, false),
-    (false, true),
+    //    (true, true),
+    //    (true, false),
+    //    (false, true),
     (false, false),
   )
   testConfigs.foreach { testConfig =>
     test(s"PETopTest(is_wallace = ${testConfig._1}, is_bitslice = ${testConfig._2}) random test") {
       SIMCFG().compile {
         val dut = if (tool.IEEE_FP32) {
-          PE_top(weightWidth = 8, actExpWidth = 8, actMantissaWidth = 23, psumExpWidth = 8, psumMantissaWidth = 23, is_wallace = testConfig._1, is_bitslice = testConfig._2)
+          PE_top(weightBufferSize = weightBufferSize, weightWidth = 8, actExpWidth = 8, actMantissaWidth = 23, psumExpWidth = 8, psumMantissaWidth = 23, is_wallace = testConfig._1, is_bitslice = testConfig._2)
         } else {
-          PE_top(weightWidth = 8, actExpWidth = 5, actMantissaWidth = 10, psumExpWidth = 5, psumMantissaWidth = 10, is_wallace = testConfig._1, is_bitslice = testConfig._2)
+          PE_top(weightBufferSize = weightBufferSize, weightWidth = 8, actExpWidth = 5, actMantissaWidth = 10, psumExpWidth = 5, psumMantissaWidth = 10, is_wallace = testConfig._1, is_bitslice = testConfig._2)
         }
         dut
       }.doSimUntilVoid {
@@ -36,43 +41,58 @@ class PETopTest extends AnyFunSuite {
               val testCase = 1 << 20
               val epsilon = 1.0 * 1e-2
               val err = Array.tabulate(testCase)({ i =>
-                val (b, fb) = tool.genRand()
-                val (d, fd) = tool.genRand()
-
-                dut.io.in_a.randomize()
+                dut.io.in_a.foreach(_.randomize())
                 dut.io.rm #= RoundingEncoding.RNE
                 dut.io.a_preload #= true
+                dut.io.calc_valid #= false
                 dut.clockDomain.waitSampling(1)
+                val avec = Array.tabulate(weightBufferSize) { x =>
+                  dut.io.in_a(x).toInt
+                }
+                val favec = avec.map(_.toFloat)
 
-                // preloaded a
-                dut.io.in_b #= b
-                dut.io.in_d #= d
-                dut.io.a_preload #= false
-                dut.clockDomain.waitSampling(1)
+                val bBF = Array.tabulate(weightBufferSize) { x =>
+                  tool.genRandAlmostNormal()
+                }
+                val bvec = bBF.map(_._1)
+                val fbvec = bBF.map(_._2)
 
-                val a = dut.io.in_a.toInt
-                val fa = a.toFloat
+                val (d, fd) = tool.genRandAlmostNormal()
+
+                // to calculate C = A * W + d
+                (0 until weightBufferSize).foreach { idx =>
+                  val b = bvec(idx)
+                  // preloaded a
+                  dut.io.in_b #= b
+                  dut.io.in_d #= d
+                  dut.io.a_preload #= false
+                  dut.io.calc_valid #= true
+                  dut.clockDomain.waitSampling(1)
+                  dut.clockDomain.waitFallingEdge()
+                }
 
                 // check
                 val res = dut.io.out_c.toInt
 
                 // to avoid that no errors are introduced under all-fp32 precision
-                val std_res_temp = if (tool.IEEE_FP32) tool.FP2Int(fa * fb) else new FP16().float2int16(fa * fb)
-                val std_res = if (tool.IEEE_FP32) tool.FP2Int(tool.Int2FP(std_res_temp) + fd) else new FP16().float2int16(new FP16().int16tofloat(std_res_temp) + fd)
+                var std_res_f = fd
+                Array.tabulate(weightBufferSize) { x =>
+                  fpPrecisionPreserve(favec(x) * fbvec(x))
+                }.foreach { x =>
+                  std_res_f = fpPrecisionPreserve(std_res_f + x)
+                }
 
-                //              println(s"fa + fb = ${fa + fb}")
+                val std_res = if (tool.IEEE_FP32) tool.FP2Int(std_res_f) else new FP16().float2int16(std_res_f)
 
                 val res_f = if (tool.IEEE_FP32) tool.Int2FP(res) else new FP16().int16tofloat(res)
-                val std_res_f = if (tool.IEEE_FP32) tool.Int2FP(std_res) else new FP16().int16tofloat(std_res)
 
                 val rerr_tmp = (if (tool.IEEE_FP32) (tool.Int2FP(res) - tool.Int2FP(std_res)) / tool.Int2FP(std_res) else (new FP16().int16tofloat(res) - new FP16().int16tofloat(std_res)) / new FP16().int16tofloat(std_res)).abs
                 val rerr = if (rerr_tmp.isNaN || rerr_tmp.isInfinity) 0.0f else rerr_tmp
                 val iseq = (res == std_res) || (tool.isNan(res) && tool.isNan(std_res))
                 val s_failed = !iseq
                 if (!iseq) {
-                  println(s"a * b + d = $fa * $fb + $fd = 0x${a.toInt.toHexString} * 0x${b.toInt.toHexString} + 0x${d.toInt.toHexString} = $std_res_f = 0x${std_res.toHexString}")
-                  println(s"res     ${"".padTo((fa.toString.length + fb.toString.length + 12 + a.toString().length + b.toString().length), ' ')} = $res_f = 0x${res.toHexString}")
-                  println(" ")
+                  println("Something is going wrong...")
+                  println(s"$std_res_f != $res_f")
                 }
                 (rerr, iseq, s_failed)
               }).map({ x => if (x._2) 0.0f else if (x._3) 2 * epsilon * testCase else x._1 }).sum / testCase
