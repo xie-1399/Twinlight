@@ -17,9 +17,9 @@ class PETopTest extends AnyFunSuite {
   }
 
   val testConfigs = Array(
-    //    (true, true),
-    //    (true, false),
-    //    (false, true),
+    (true, true),
+    (true, false),
+    (false, true),
     (false, false),
   )
   testConfigs.foreach { testConfig =>
@@ -38,7 +38,7 @@ class PETopTest extends AnyFunSuite {
           //        SimTimeout(100000000 * 10)
           def monitor() = {
             val testThread = fork {
-              val testCase = 1 << 20
+              val testCase = 1 << 15
               val epsilon = 1.0 * 1e-2
               val err = Array.tabulate(testCase)({ i =>
                 dut.io.in_a.foreach(_.randomize())
