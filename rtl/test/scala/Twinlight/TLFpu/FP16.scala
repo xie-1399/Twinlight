@@ -113,14 +113,13 @@ class FP16 {
           // 0.0000000000|0001xxx_xxxx_xxxx_xxxx_xxxx_xxxx
           //            g rs------------
           val rr = if (shamt == 24) true else false
-          val ss = if (shamt == 24) (sig_i & ((1 << (23 - 1)) - 1)) != 0 else true
+          val ss = if (shamt == 24) (sig_i & ((1 << (24 - 1)) - 1)) != 0 else true
           //      println(s"=== g, r, s = $gg, $rr, $ss")
           0 + (if (rr && ss) 1 else 0)
       }
     } else {
       sig1
     }
-
 
     val exp_tmp = if (exp == 0) 0 else if (exp == 0xff) 0x1f else if (exp1 >= 31) 31 else if (exp1 == 0) 0 else if (exp1 < 0) 0 else exp1
     val sig_tmp = if (exp == 0) sig1 else if (exp == 0xff) sig1 else if (exp1 >= 31) 0x000 /* infinity, not 0x3ff*/ else if (exp1 <= 0) sig2 else sig1
@@ -131,12 +130,12 @@ class FP16 {
   }
 
   def float2int16(x: Float): Int = {
-    //    println(s"f2i16: ${x}")
+//        println(s"f2i16: ${x}")
     val (sign32, exp32, sig32) = unpack32(x)
-    //    println(s"exp = ${exp32}, sig = ${sig32}")
+//        println(s"  32exp = ${exp32}, sig = ${sig32}")
     // fp16: 5 bits exponent, 10 bits mantissa
     val (sign16, exp16, sig16) = f32to16(sign32, exp32, sig32)
-    //    println(s"exp = ${exp16}, sig = ${sig16}")
+//        println(s"  16exp = ${exp16}, sig = ${sig16}")
     (sign16 << 15 | exp16 << 10 | sig16) & 0xFFFF
   }
 

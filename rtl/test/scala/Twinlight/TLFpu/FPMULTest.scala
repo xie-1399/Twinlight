@@ -36,12 +36,12 @@ class FPMULTest extends AnyFunSuite {
               val err = Array.tabulate(testCase)({ i =>
                 val (a, fa) = tool.genRand()
                 val (b, fb) = tool.genRand()
-                //              val sa = "547"
-                //              val sb = "8023"
-                //              val base = 16
-                //
-                //              val (a, fa) = (BigInt(sa, base).mod(1L << 16), new FP16().int16tofloat(BigInt(sa, base).toInt))
-                //              val (b, fb) = (BigInt(sb, base).mod(1L << 16), new FP16().int16tofloat(BigInt(sb, base).toInt))
+//                              val sa = "2800"
+//                              val sb = "8018"
+//                              val base = 16
+//
+//                              val (a, fa) = (BigInt(sa, base).mod(1L << 16), new FP16().int16tofloat(BigInt(sa, base).toInt))
+//                              val (b, fb) = (BigInt(sb, base).mod(1L << 16), new FP16().int16tofloat(BigInt(sb, base).toInt))
                 dut.io.a #= a
                 dut.io.b #= b
                 dut.io.rm #= RoundingEncoding.RNE
