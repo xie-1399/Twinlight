@@ -18,6 +18,7 @@ case class PE_top(weightBufferSize: Int, weightWidth: Int, actExpWidth: Int, act
 
     val in_a = in port Vec.fill(weightBufferSize)(SInt(weightWidth bits))
     val a_preload = in port Bool()
+    val out_a = out port Vec.fill(weightBufferSize)(SInt(weightWidth bits))
 
     val calc_valid = in port Bool()
     val in_b = in port UInt(actFloatintWidth bits)
@@ -29,9 +30,10 @@ case class PE_top(weightBufferSize: Int, weightWidth: Int, actExpWidth: Int, act
   }
 
   val weight_r = Vec.fill(weightBufferSize)(Reg(SInt(weightWidth bits)))
+  io.out_a := weight_r
 
   when(io.a_preload) {
-    weight_r.zip(io.in_a).foreach { case (wr, w) => wr := w }
+    weight_r := io.in_a
   }
 
   val weight_sel_cnt = Reg(UInt(log2Up(weightBufferSize) bits)) init 0
