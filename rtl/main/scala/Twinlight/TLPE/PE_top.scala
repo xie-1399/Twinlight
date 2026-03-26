@@ -7,7 +7,7 @@ import spinal.lib._
 
 import scala.language.postfixOps
 
-case class PE_top(weightBufferSize: Int, weightWidth: Int, actExpWidth: Int, actMantissaWidth: Int, psumExpWidth: Int, psumMantissaWidth: Int, is_wallace: Boolean = false, is_bitslice: Boolean = false) extends TLModule {
+case class PE_top(require_bias: Boolean, weightBufferSize: Int, weightWidth: Int, actExpWidth: Int, actMantissaWidth: Int, psumExpWidth: Int, psumMantissaWidth: Int, is_wallace: Boolean = false, is_bitslice: Boolean = false) extends TLModule {
   assert(actExpWidth == psumExpWidth)
   assert(actMantissaWidth == psumMantissaWidth) // assume the same precision
 
@@ -15,22 +15,29 @@ case class PE_top(weightBufferSize: Int, weightWidth: Int, actExpWidth: Int, act
   val psumFloatintWidth = psumExpWidth + psumMantissaWidth + 1
   val io = new Bundle {
     val rm = in port RoundingEncoding()
+    val out_rm = out port RoundingEncoding()
 
     val in_a = in port Vec.fill(weightBufferSize)(SInt(weightWidth bits))
     val a_preload = in port Bool()
     val out_a = out port Vec.fill(weightBufferSize)(SInt(weightWidth bits))
+    val out_preload = out port Reg(Bool())
 
     val calc_valid = in port Bool()
+    val out_calc_valid = out port Bool()
     val in_b = in port UInt(actFloatintWidth bits)
-    val in_d = in port UInt(psumFloatintWidth bits)
+    val in_c = in port UInt(psumFloatintWidth bits)
+    val in_d = in port (require_bias generate UInt(psumFloatintWidth bits))
 
-    //    val out_a = out port Reg(SInt(weightWidth bits))
     val out_b = out port Reg(UInt(actFloatintWidth bits))
     val out_c = out port Reg(UInt(psumFloatintWidth bits))
   }
 
+
   val weight_r = Vec.fill(weightBufferSize)(Reg(SInt(weightWidth bits)))
   io.out_a := weight_r
+  io.out_preload := io.a_preload
+  io.out_rm := io.rm
+  io.out_calc_valid := io.calc_valid
 
   when(io.a_preload) {
     weight_r := io.in_a
@@ -61,7 +68,11 @@ case class PE_top(weightBufferSize: Int, weightWidth: Int, actExpWidth: Int, act
   when(accum_valid_r) {
     adder.io.b := io.out_c
   } otherwise {
-    adder.io.b := io.in_d
+    if (require_bias) {
+      adder.io.b := io.in_d
+    } else {
+      adder.io.b := U(0).resized
+    }
   }
   adder.io.rm := io.rm
 

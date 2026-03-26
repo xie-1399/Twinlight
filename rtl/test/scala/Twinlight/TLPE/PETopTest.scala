@@ -11,6 +11,7 @@ class PETopTest extends AnyFunSuite {
 
   val tool = BasicFloatTools(fp32 = false, fp16 = true)
   val weightBufferSize = 4
+  val require_bias = false
 
   def fpPrecisionPreserve(a: Float): Float = {
     if (tool.IEEE_FP32) tool.Int2FP(tool.FP2Int(a)) else new FP16().int16tofloat(new FP16().float2int16(a))
@@ -26,9 +27,9 @@ class PETopTest extends AnyFunSuite {
     test(s"PETopTest(is_wallace = ${testConfig._1}, is_bitslice = ${testConfig._2}) random test") {
       SIMCFG().compile {
         val dut = if (tool.IEEE_FP32) {
-          PE_top(weightBufferSize = weightBufferSize, weightWidth = 8, actExpWidth = 8, actMantissaWidth = 23, psumExpWidth = 8, psumMantissaWidth = 23, is_wallace = testConfig._1, is_bitslice = testConfig._2)
+          PE_top(require_bias=require_bias, weightBufferSize = weightBufferSize, weightWidth = 8, actExpWidth = 8, actMantissaWidth = 23, psumExpWidth = 8, psumMantissaWidth = 23, is_wallace = testConfig._1, is_bitslice = testConfig._2)
         } else {
-          PE_top(weightBufferSize = weightBufferSize, weightWidth = 8, actExpWidth = 5, actMantissaWidth = 10, psumExpWidth = 5, psumMantissaWidth = 10, is_wallace = testConfig._1, is_bitslice = testConfig._2)
+          PE_top(require_bias=require_bias, weightBufferSize = weightBufferSize, weightWidth = 8, actExpWidth = 5, actMantissaWidth = 10, psumExpWidth = 5, psumMantissaWidth = 10, is_wallace = testConfig._1, is_bitslice = testConfig._2)
         }
         dut
       }.doSimUntilVoid {
@@ -64,7 +65,9 @@ class PETopTest extends AnyFunSuite {
                   val b = bvec(idx)
                   // preloaded a
                   dut.io.in_b #= b
-                  dut.io.in_d #= d
+                  if (require_bias) {
+                    dut.io.in_d #= d
+                  }
                   dut.io.a_preload #= false
                   dut.io.calc_valid #= true
                   dut.clockDomain.waitSampling(1)
@@ -75,7 +78,7 @@ class PETopTest extends AnyFunSuite {
                 val res = dut.io.out_c.toInt
 
                 // to avoid that no errors are introduced under all-fp32 precision
-                var std_res_f = fd
+                var std_res_f = if (require_bias) fd else 0
                 Array.tabulate(weightBufferSize) { x =>
                   fpPrecisionPreserve(favec(x) * fbvec(x))
                 }.foreach { x =>
