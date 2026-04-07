@@ -277,7 +277,7 @@ case class FMUL_s3(expWidth: Int, precision: Int) extends TLModule {
   io.to_fadd.inter_flags.overflow := exp_pre_round.asUInt > (U"1'b1" #* expWidth).asUInt
 }
 
-case class FMUL(expWidth: Int, precision: Int, is_wallace: Boolean = true, is_bitslice: Boolean = true) extends TLModule {
+case class FMUL(expWidth: Int, precision: Int, is_wallace: Boolean = true, is_bitslice: Boolean = true, outputReg: Boolean = false, pipeAt: Seq[Int] = Seq()) extends TLModule {
   val manWidthWithHiddenOne = precision + 1
   val fullWidth = expWidth + precision + 1
   val io = new Bundle() {
@@ -300,33 +300,46 @@ case class FMUL(expWidth: Int, precision: Int, is_wallace: Boolean = true, is_bi
   fmul_s1.io.b := io.b
   fmul_s1.io.rm := io.rm
 
+  val prod = UInt(2 * manWidthWithHiddenOne bits)
+
   if (is_bitslice) {
-    val multiplier = BitSliceMultiplier(manWidthWithHiddenOne + 1, manWidthWithHiddenOne + 1, 2, wallaceTree = is_wallace)
+    val multiplier = BitSliceMultiplier(manWidthWithHiddenOne + 1, manWidthWithHiddenOne + 1, 2, wallaceTree = is_wallace, pipeAt = pipeAt)
     multiplier.io.multiplier := raw_a.mantissa.asUInt.expand.asSInt
     multiplier.io.multiplicand := raw_b.mantissa.asUInt.expand.asSInt
-
-    fmul_s2.io.prod := multiplier.io.product.trim(2).asUInt
+    prod := multiplier.io.product.trim(2).asUInt
   } else if (is_wallace) {
     // 011 * 011 = extra sign | sign | 1001
     // sign | hidden bit | precision
-    val multiplier = Multiplier(precision + 1 + 1, pipeAt = Seq())
+    val multiplier = Multiplier(precision + 1 + 1, pipeAt = pipeAt)
     multiplier.io.a := raw_a.mantissa.asUInt.expand // multiplier requires a sign bit.
     multiplier.io.b := raw_b.mantissa.asUInt.expand
     multiplier.io.regEnables.foreach(_ := True)
-
-    fmul_s2.io.prod := multiplier.io.result.trim(2)
-
+    prod := multiplier.io.result.trim(2)
   } else {
-    fmul_s2.io.prod := (raw_a.mantissa.asUInt.expand * raw_b.mantissa.asUInt.expand).trim(2)
+    val prod_r = Vec.fill(pipeAt.size)(Reg(UInt(2 * manWidthWithHiddenOne bits)))
+    prod_r(0) := (raw_a.mantissa.asUInt.expand * raw_b.mantissa.asUInt.expand).trim(2)
+    (1 until prod_r.size).foreach { x => prod_r(x) := prod_r(x - 1) }
+    prod := prod_r.last
   }
 
-  fmul_s2.io.inx := fmul_s1.io.out
+  val pipeline_reg1 = new Area {
+    val r = RegNext(fmul_s1.io.out)
+  }
+  val pipeline_reg2 = new Area {
+    val r = RegNext(fmul_s2.io.out)
+  }
+  fmul_s2.io.inx := pipeline_reg1.r
+  fmul_s2.io.prod := prod
+  fmul_s3.io.inx := pipeline_reg2.r
 
+  val pipeline_reg3 = new Area {
+    val to_fadd = if (outputReg) RegNext(fmul_s3.io.to_fadd) else fmul_s3.io.to_fadd
+    val result = if (outputReg) RegNext(fmul_s3.io.result) else fmul_s3.io.result
+    val fflags = if (outputReg) RegNext(fmul_s3.io.fflags) else fmul_s3.io.fflags
+  }
 
-  fmul_s3.io.inx := fmul_s2.io.out
-
-  io.to_fadd := fmul_s3.io.to_fadd
-  io.result := fmul_s3.io.result
-  io.fflags := fmul_s3.io.fflags
+  io.to_fadd := pipeline_reg3.to_fadd
+  io.result := pipeline_reg3.result
+  io.fflags := pipeline_reg3.fflags
 
 }
