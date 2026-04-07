@@ -439,7 +439,7 @@ case class FPU_ADD_s2(expWidth: Int, precision: Int, outPc: Int)
   io.fflags := Mux(special_case_happen, special_path_fflags, common_fflags).asUInt
 }
 
-case class FPU_ADD(expWidth: Int, precision: Int) extends TLModule {
+case class FPU_ADD(expWidth: Int, precision: Int, outputReg: Boolean = false) extends TLModule {
   val outPc = precision
 
   val io = master(FPU_IF(expWidth, precision))
@@ -451,8 +451,16 @@ case class FPU_ADD(expWidth: Int, precision: Int) extends TLModule {
   fadd_s1.io.b := io.b
   fadd_s1.io.rm := io.rm
 
-  fadd_s2.io.in := fadd_s1.io.outx
+  val pipeline_reg1 = new Area {
+    val r = RegNext(fadd_s1.io.outx)
+  }
+  fadd_s2.io.in := pipeline_reg1.r
 
-  io.result := fadd_s2.io.result
-  io.fflags := fadd_s2.io.fflags
+  val pipeline_reg2 = new Area{
+    val result = if(outputReg) RegNext(fadd_s2.io.result) else fadd_s2.io.result
+    val fflags = if(outputReg) RegNext(fadd_s2.io.fflags) else fadd_s2.io.fflags
+  }
+
+  io.result := pipeline_reg2.result
+  io.fflags := pipeline_reg2.fflags
 }
