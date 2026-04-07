@@ -147,7 +147,7 @@ case class Multiplier(len: Int, pipeAt: Seq[Int]) extends TLModule {
       while (cols(k).size == 1) {
         k = k + 1
       }
-      val carry = Cat(cols.drop(k).map(_(1)))//U(0, cols.length - k bits) //
+      val carry = Cat(cols.drop(k).map(_(1))) //U(0, cols.length - k bits) //
       (sum.asUInt, (carry ## U(0, k bits)).asUInt)
     } else {
       val columns_next = Array.fill(2 * len)(Seq[Bool]())
@@ -159,8 +159,10 @@ case class Multiplier(len: Int, pipeAt: Seq[Int]) extends TLModule {
         cout2 = c2
       }
 
-      //      val needReg = pipeAt.contains(depth)
-      val toNextLayer = columns_next
+      val needReg = pipeAt.contains(depth)
+      val toNextLayer = if (needReg) columns_next.map {
+        _.map { x => RegNext(x) }
+      } else columns_next
       addAll(toNextLayer, depth + 1)
     }
   }
